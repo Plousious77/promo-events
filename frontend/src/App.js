@@ -1754,6 +1754,148 @@ const Dashboard = () => {
   return <RegularDashboard />;
 };
 
+// Regular Member View Component (What normal users see)
+const RegularMemberView = ({ user }) => {
+  return (
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl shadow-lg p-8 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold mb-2">Welcome back, {user?.full_name || 'Member'}!</h2>
+            <p className="text-blue-100 text-lg">Ready to serve and grow together</p>
+          </div>
+          <div className="text-right">
+            <div className="text-4xl mb-2">🙏</div>
+            <p className="text-blue-100">Member Dashboard</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Member Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">My Points</p>
+              <p className="text-3xl font-bold text-green-600">{user?.points || 0}</p>
+              <p className="text-xs text-green-500">Earned through service</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">⭐</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">YHWH Coins</p>
+              <p className="text-3xl font-bold text-purple-600">{user?.coins?.toLocaleString() || 0}</p>
+              <p className="text-xs text-purple-500">Kingdom rewards</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">💰</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">My Groups</p>
+              <p className="text-3xl font-bold text-blue-600">1</p>
+              <p className="text-xs text-blue-500">Active memberships</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">🫂</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <button className="p-4 bg-blue-50 hover:bg-blue-100 rounded-xl border-2 border-blue-200 hover:border-blue-300 transition-all text-center">
+            <div className="text-3xl mb-2">📅</div>
+            <h4 className="font-semibold text-blue-700">My Tasks</h4>
+            <p className="text-sm text-blue-600">View assignments</p>
+          </button>
+          
+          <button className="p-4 bg-green-50 hover:bg-green-100 rounded-xl border-2 border-green-200 hover:border-green-300 transition-all text-center">
+            <div className="text-3xl mb-2">⏰</div>
+            <h4 className="font-semibold text-green-700">Punch In/Out</h4>
+            <p className="text-sm text-green-600">Track attendance</p>
+          </button>
+          
+          <button className="p-4 bg-purple-50 hover:bg-purple-100 rounded-xl border-2 border-purple-200 hover:border-purple-300 transition-all text-center">
+            <div className="text-3xl mb-2">🫂</div>
+            <h4 className="font-semibold text-purple-700">My Groups</h4>
+            <p className="text-sm text-purple-600">View communities</p>
+          </button>
+          
+          <button className="p-4 bg-orange-50 hover:bg-orange-100 rounded-xl border-2 border-orange-200 hover:border-orange-300 transition-all text-center">
+            <div className="text-3xl mb-2">📊</div>
+            <h4 className="font-semibold text-orange-700">My Progress</h4>
+            <p className="text-sm text-orange-600">View achievements</p>
+          </button>
+        </div>
+      </div>
+
+      {/* Upcoming Tasks/Events */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-6">Upcoming Activities</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                📅
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">Sunday Service</h4>
+                <p className="text-sm text-gray-600">Tomorrow at 10:00 AM</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-green-600">+50 Points</p>
+              <p className="text-xs text-gray-500">Attendance reward</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                📖
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">Bible Study</h4>
+                <p className="text-sm text-gray-600">Wednesday at 7:00 PM</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-green-600">+30 Points</p>
+              <p className="text-xs text-gray-500">Study participation</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Member Info Note */}
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+        <div className="flex items-center space-x-3">
+          <span className="text-2xl">ℹ️</span>
+          <div>
+            <h4 className="font-semibold text-blue-900">Member Experience Preview</h4>
+            <p className="text-blue-700">This is what regular members see when they log in. You can switch back to Admin View using the toggle button above.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Video Conference Content Component
 const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
   const [videoRooms, setVideoRooms] = useState([]);
