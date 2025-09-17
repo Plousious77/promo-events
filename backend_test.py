@@ -372,6 +372,313 @@ class ChurchYouthAppTester:
             return True
         return False
 
+    # VIDEO CONFERENCING TESTS
+    def test_login_super_admin(self):
+        """Test login with the predefined super admin credentials"""
+        success, response = self.run_test(
+            "Login Super Admin",
+            "POST",
+            "auth/login",
+            200,
+            data={
+                "email": "benolyginter7@gmail.com",
+                "password": "TempElshaddai2024!"
+            }
+        )
+        
+        if success and 'access_token' in response:
+            self.admin_token = response['access_token']
+            self.admin_email = "benolyginter7@gmail.com"
+            print(f"   Super admin logged in successfully")
+            return True
+        return False
+
+    def test_create_video_room(self):
+        """Test creating a video conference room"""
+        room_data = {
+            "name": "Test Bible Study Room",
+            "max_participants": 50,
+            "enable_recording": True,
+            "enable_screenshare": True,
+            "enable_livestreaming": False,
+            "expires_in_minutes": 120
+        }
+        
+        success, response = self.run_test(
+            "Create Video Room",
+            "POST",
+            "video-rooms/",
+            200,
+            data=room_data,
+            token=self.admin_token
+        )
+        
+        if success and 'id' in response:
+            self.created_video_room_id = response['id']
+            print(f"   Video room created with ID: {self.created_video_room_id}")
+            print(f"   Daily room URL: {response.get('daily_room_url', 'N/A')}")
+            return True
+        return False
+
+    def test_create_video_room_with_group(self):
+        """Test creating a video room with group association"""
+        if not self.created_group_id:
+            print("❌ No group ID available for video room with group test")
+            return False
+            
+        room_data = {
+            "name": "Youth Ministry Video Meeting",
+            "max_participants": 100,
+            "enable_recording": False,
+            "enable_screenshare": True,
+            "enable_livestreaming": True,
+            "group_id": self.created_group_id,
+            "expires_in_minutes": 180
+        }
+        
+        success, response = self.run_test(
+            "Create Video Room with Group",
+            "POST",
+            "video-rooms/",
+            200,
+            data=room_data,
+            token=self.admin_token
+        )
+        
+        if success and 'id' in response:
+            print(f"   Video room with group created: {response['id']}")
+            return True
+        return False
+
+    def test_create_video_room_unauthorized(self):
+        """Test creating video room without authentication (should fail)"""
+        room_data = {
+            "name": "Unauthorized Room",
+            "max_participants": 10,
+            "enable_recording": False,
+            "enable_screenshare": True,
+            "expires_in_minutes": 60
+        }
+        
+        success, response = self.run_test(
+            "Create Video Room (Unauthorized - Should Fail)",
+            "POST",
+            "video-rooms/",
+            401,
+            data=room_data
+        )
+        
+        return success
+
+    def test_get_video_rooms(self):
+        """Test getting list of video rooms"""
+        success, response = self.run_test(
+            "Get Video Rooms",
+            "GET",
+            "video-rooms/",
+            200,
+            token=self.admin_token
+        )
+        
+        if success:
+            print(f"   Found {len(response)} video rooms")
+            return True
+        return False
+
+    def test_get_video_rooms_with_group_filter(self):
+        """Test getting video rooms filtered by group"""
+        if not self.created_group_id:
+            print("❌ No group ID available for filtered video rooms test")
+            return False
+            
+        success, response = self.run_test(
+            "Get Video Rooms (Group Filtered)",
+            "GET",
+            f"video-rooms/?group_id={self.created_group_id}",
+            200,
+            token=self.admin_token
+        )
+        
+        if success:
+            print(f"   Found {len(response)} video rooms for group")
+            return True
+        return False
+
+    def test_get_video_rooms_unauthorized(self):
+        """Test getting video rooms without authentication (should fail)"""
+        success, response = self.run_test(
+            "Get Video Rooms (Unauthorized - Should Fail)",
+            "GET",
+            "video-rooms/",
+            401
+        )
+        
+        return success
+
+    def test_generate_join_token(self):
+        """Test generating a join token for video room"""
+        if not self.created_video_room_id:
+            print("❌ No video room ID available for join token test")
+            return False
+            
+        success, response = self.run_test(
+            "Generate Video Room Join Token",
+            "POST",
+            f"video-rooms/{self.created_video_room_id}/join-token",
+            200,
+            token=self.admin_token
+        )
+        
+        if success and 'token' in response:
+            print(f"   Join token generated successfully")
+            print(f"   Room URL: {response.get('room_url', 'N/A')}")
+            print(f"   Permissions: {response.get('permissions', {})}")
+            return True
+        return False
+
+    def test_generate_join_token_unauthorized(self):
+        """Test generating join token without authentication (should fail)"""
+        if not self.created_video_room_id:
+            print("❌ No video room ID available for unauthorized join token test")
+            return False
+            
+        success, response = self.run_test(
+            "Generate Join Token (Unauthorized - Should Fail)",
+            "POST",
+            f"video-rooms/{self.created_video_room_id}/join-token",
+            401
+        )
+        
+        return success
+
+    def test_generate_join_token_invalid_room(self):
+        """Test generating join token for non-existent room (should fail)"""
+        fake_room_id = "non-existent-room-id"
+        
+        success, response = self.run_test(
+            "Generate Join Token (Invalid Room - Should Fail)",
+            "POST",
+            f"video-rooms/{fake_room_id}/join-token",
+            404,
+            token=self.admin_token
+        )
+        
+        return success
+
+    def test_delete_video_room(self):
+        """Test deleting a video room"""
+        if not self.created_video_room_id:
+            print("❌ No video room ID available for deletion test")
+            return False
+            
+        success, response = self.run_test(
+            "Delete Video Room",
+            "DELETE",
+            f"video-rooms/{self.created_video_room_id}",
+            200,
+            token=self.admin_token
+        )
+        
+        if success:
+            print(f"   Video room deleted successfully")
+            return True
+        return False
+
+    def test_delete_video_room_unauthorized(self):
+        """Test deleting video room without authentication (should fail)"""
+        # Create a room first for this test
+        room_data = {
+            "name": "Room to Delete Unauthorized",
+            "max_participants": 10,
+            "expires_in_minutes": 60
+        }
+        
+        create_success, create_response = self.run_test(
+            "Create Room for Unauthorized Delete Test",
+            "POST",
+            "video-rooms/",
+            200,
+            data=room_data,
+            token=self.admin_token
+        )
+        
+        if not create_success or 'id' not in create_response:
+            print("❌ Failed to create room for unauthorized delete test")
+            return False
+            
+        room_id = create_response['id']
+        
+        success, response = self.run_test(
+            "Delete Video Room (Unauthorized - Should Fail)",
+            "DELETE",
+            f"video-rooms/{room_id}",
+            401
+        )
+        
+        return success
+
+    def test_delete_video_room_invalid(self):
+        """Test deleting non-existent video room (should fail)"""
+        fake_room_id = "non-existent-room-id"
+        
+        success, response = self.run_test(
+            "Delete Video Room (Invalid Room - Should Fail)",
+            "DELETE",
+            f"video-rooms/{fake_room_id}",
+            404,
+            token=self.admin_token
+        )
+        
+        return success
+
+    def test_video_room_expiration_handling(self):
+        """Test creating a room with short expiration and checking behavior"""
+        room_data = {
+            "name": "Short Expiration Room",
+            "max_participants": 10,
+            "expires_in_minutes": 1  # Very short expiration for testing
+        }
+        
+        success, response = self.run_test(
+            "Create Short Expiration Video Room",
+            "POST",
+            "video-rooms/",
+            200,
+            data=room_data,
+            token=self.admin_token
+        )
+        
+        if success and 'id' in response:
+            room_id = response['id']
+            print(f"   Short expiration room created: {room_id}")
+            print(f"   Expires at: {response.get('expires_at', 'N/A')}")
+            return True
+        return False
+
+    def test_video_room_max_participants_limit(self):
+        """Test creating room with maximum participant limit"""
+        room_data = {
+            "name": "Large Capacity Room",
+            "max_participants": 1000,  # Maximum supported
+            "enable_recording": True,
+            "enable_screenshare": True,
+            "expires_in_minutes": 120
+        }
+        
+        success, response = self.run_test(
+            "Create Large Capacity Video Room",
+            "POST",
+            "video-rooms/",
+            200,
+            data=room_data,
+            token=self.admin_token
+        )
+        
+        if success and 'id' in response:
+            print(f"   Large capacity room created with {response.get('max_participants', 0)} max participants")
+            return True
+        return False
+
 def main():
     print("🚀 Starting Glory of Elshaddai Christian Center Connect API Tests")
     print("=" * 70)
