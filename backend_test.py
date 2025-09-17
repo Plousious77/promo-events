@@ -899,9 +899,8 @@ class ChurchYouthAppTester:
         success, response = self.run_test(
             "Generate JWT Token (Member)",
             "POST",
-            "agora/jwt/generate",
+            "agora/jwt/generate?user_role=member",
             200,
-            data={"user_role": "member"},
             token=self.admin_token
         )
         
