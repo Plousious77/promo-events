@@ -1310,6 +1310,50 @@ def main():
     else:
         print("❌ No admin token available for Agora token generation tests")
 
+    # AGORA MANAGED SERVICES API TESTS - COMPREHENSIVE INTEGRATION
+    print("\n🚀 AGORA MANAGED SERVICES API TESTS - COMPREHENSIVE INTEGRATION")
+    print("-" * 65)
+    print("Testing complete Agora Managed Services API with JWT, channels, recording, and approval system")
+    
+    if tester.admin_token:
+        # Initialize created_channel_data attribute
+        tester.created_channel_data = {}
+        
+        # JWT Token Generation Tests
+        print("\n🔐 JWT Token Generation Tests")
+        tester.test_agora_jwt_generation_super_admin()
+        tester.test_agora_jwt_generation_group_admin()
+        tester.test_agora_jwt_generation_member()
+        tester.test_agora_environment_variables()
+        
+        # Channel Management Tests
+        print("\n📺 Channel Management Tests")
+        tester.test_agora_channel_create()
+        tester.test_agora_channel_join()
+        tester.test_agora_channel_share()
+        
+        # Recording Management Tests
+        print("\n🎬 Recording Management Tests")
+        tester.test_agora_recording_start()
+        tester.test_agora_recording_stop()
+        tester.test_agora_recording_layout_change()
+        
+        # Meeting Approval System Tests
+        print("\n✋ Meeting Approval System Tests")
+        tester.test_agora_join_request()
+        tester.test_agora_join_approval()
+        
+        # Church Role Management Tests
+        print("\n👥 Church Role Management Tests")
+        tester.test_agora_roles_create()
+        
+        # Authorization and Security Tests
+        print("\n🔒 Authorization and Security Tests")
+        tester.test_agora_unauthorized_access()
+        tester.test_agora_role_based_permissions()
+    else:
+        print("❌ No admin token available for Agora Managed Services API tests")
+
     # VIDEO CONFERENCING TESTS - Daily.co Integration
     print("\n🎥 VIDEO CONFERENCING TESTS (Daily.co Integration)")
     print("-" * 50)
