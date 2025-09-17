@@ -12,6 +12,9 @@ class ChurchYouthAppTester:
         self.tests_passed = 0
         self.created_task_id = None
         self.created_group_id = None
+        self.created_video_room_id = None
+        self.admin_email = None
+        self.member_email = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, token=None):
         """Run a single API test"""
