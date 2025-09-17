@@ -737,67 +737,75 @@ const SuperAdminPortal = () => {
             </div>
           )}
 
-          {activeTab === 'overview' && (
-            <SystemOverviewContent systemStats={systemStats} onCleanSystem={handleCleanVirginState} />
-          )}
+          {isUserView ? (
+            // User View - Show what regular members see
+            <RegularMemberView user={user} />
+          ) : (
+            // Admin View - Show full admin dashboard
+            <>
+              {activeTab === 'overview' && (
+                <SystemOverviewContent systemStats={systemStats} onCleanSystem={handleCleanVirginState} />
+              )}
 
-          {activeTab === 'groups' && (
-            <GroupManagementContent 
-              groups={groups} 
-              users={users}
-              API={API}
-              onUpdate={fetchGroups}
-              setMessage={setMessage}
-            />
-          )}
+              {activeTab === 'groups' && (
+                <GroupManagementContent 
+                  groups={groups} 
+                  users={users}
+                  API={API}
+                  onUpdate={fetchGroups}
+                  setMessage={setMessage}
+                />
+              )}
 
-          {activeTab === 'users' && (
-            <UserManagementContent users={users} API={API} onUpdate={fetchUsers} setMessage={setMessage} />
-          )}
+              {activeTab === 'users' && (
+                <UserManagementContent users={users} API={API} onUpdate={fetchUsers} setMessage={setMessage} />
+              )}
 
-          {activeTab === 'meetings' && (
-            <MeetingManagementContent 
-              meetings={meetings} 
-              groups={groups} 
-              users={users}
-              API={API}
-              onUpdate={fetchMeetings}
-              setMessage={setMessage}
-            />
-          )}
+              {activeTab === 'meetings' && (
+                <MeetingManagementContent 
+                  meetings={meetings} 
+                  groups={groups} 
+                  users={users}
+                  API={API}
+                  onUpdate={fetchMeetings}
+                  setMessage={setMessage}
+                />
+              )}
 
-          {activeTab === 'video-conference' && (
-            <VideoConferenceContent 
-              API={API}
-              groups={groups}
-              users={users}
-              setMessage={setMessage}
-            />
-          )}
+              {activeTab === 'video-conference' && (
+                <VideoConferenceContent 
+                  API={API}
+                  groups={groups}
+                  users={users}
+                  setMessage={setMessage}
+                />
+              )}
 
-          {activeTab === 'activities' && (
-            <SystemActivitiesContent activities={activities} users={users} />
-          )}
+              {activeTab === 'activities' && (
+                <SystemActivitiesContent activities={activities} users={users} />
+              )}
 
-          {activeTab === 'profile' && (
-            <ProfileManagementContent 
-              user={user}
-              profileForm={profileForm}
-              setProfileForm={setProfileForm}
-              passwordForm={passwordForm}
-              setPasswordForm={setPasswordForm}
-              onProfileUpdate={handleProfileUpdate}
-              onPasswordChange={handlePasswordChange}
-              loading={loading}
-            />
-          )}
+              {activeTab === 'profile' && (
+                <ProfileManagementContent 
+                  user={user}
+                  profileForm={profileForm}
+                  setProfileForm={setProfileForm}
+                  passwordForm={passwordForm}
+                  setPasswordForm={setPasswordForm}
+                  onProfileUpdate={handleProfileUpdate}
+                  onPasswordChange={handlePasswordChange}
+                  loading={loading}
+                />
+              )}
 
-          {activeTab === 'system' && (
-            <SystemToolsContent 
-              onCleanSystem={handleCleanVirginState}
-              systemStats={systemStats}
-              loading={loading}
-            />
+              {activeTab === 'system' && (
+                <SystemToolsContent 
+                  onCleanSystem={handleCleanVirginState}
+                  systemStats={systemStats}
+                  loading={loading}
+                />
+              )}
+            </>
           )}
         </main>
       </div>
