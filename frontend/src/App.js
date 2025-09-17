@@ -2843,25 +2843,27 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
           
           {/* Agora Video Interface */}
           <div className="bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
-            <AgoraUIKit
-              connectionData={agoraConfig}
-              rtcCallbacks={rtcCallbacks}
-              settings={{
-                host: true,
-                mode: 1, // Live broadcasting mode
-                role: 1, // Host role
-              }}
-              styleProps={{
-                localBtnContainer: {
-                  backgroundColor: 'rgba(0,0,0,0.8)',
-                  borderRadius: '12px',
-                  padding: '10px'
-                },
-                maxViewContainer: {
-                  borderRadius: '12px'
-                }
-              }}
-            />
+            {agoraConfig && (
+              <AgoraUIKit
+                rtcProps={agoraConfig}
+                callbacks={rtcCallbacks}
+                styleProps={{
+                  localBtnContainer: {
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    borderRadius: '12px',
+                    padding: '10px'
+                  },
+                  maxViewContainer: {
+                    borderRadius: '12px'
+                  }
+                }}
+              />
+            )}
+            {!agoraConfig && (
+              <div className="flex items-center justify-center h-full text-white">
+                <p>Loading video conference...</p>
+              </div>
+            )}
           </div>
           
           {/* Scripture Overlay */}
