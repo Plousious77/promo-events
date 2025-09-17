@@ -745,6 +745,15 @@ const SuperAdminPortal = () => {
             />
           )}
 
+          {activeTab === 'video-conference' && (
+            <VideoConferenceContent 
+              API={API}
+              groups={groups}
+              users={users}
+              setMessage={setMessage}
+            />
+          )}
+
           {activeTab === 'activities' && (
             <SystemActivitiesContent activities={activities} users={users} />
           )}
