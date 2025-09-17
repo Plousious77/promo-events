@@ -879,6 +879,318 @@ async def update_user_status(user_id: str, status_data: dict, current_user: User
     
     return {"message": f"User status updated to {new_status}"}
 
+# Enhanced User Management Routes
+@api_router.post("/admin/users/bulk-action")
+async def bulk_user_action(action_data: BulkUserAction, current_user: User = Depends(get_super_admin)):
+    """Perform bulk actions on multiple users"""
+    try:
+        if action_data.action == "activate":
+            await db.users.update_many(
+                {"id": {"$in": action_data.user_ids}},
+                {"$set": {"status": AccountStatus.ACTIVE, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            message = f"Activated {len(action_data.user_ids)} users"
+        
+        elif action_data.action == "deactivate":
+            await db.users.update_many(
+                {"id": {"$in": action_data.user_ids}},
+                {"$set": {"status": AccountStatus.SUSPENDED, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            message = f"Deactivated {len(action_data.user_ids)} users"
+        
+        elif action_data.action == "reset_password":
+            temp_password = "TempReset2024!"
+            await db.users.update_many(
+                {"id": {"$in": action_data.user_ids}},
+                {
+                    "$set": {
+                        "password": get_password_hash(temp_password),
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+                }
+            )
+            message = f"Reset passwords for {len(action_data.user_ids)} users"
+        
+        elif action_data.action == "change_role" and action_data.value:
+            await db.users.update_many(
+                {"id": {"$in": action_data.user_ids}},
+                {"$set": {"role": action_data.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            message = f"Changed role to {action_data.value} for {len(action_data.user_ids)} users"
+        
+        else:
+            raise HTTPException(status_code=400, detail="Invalid action")
+        
+        # Log the activity
+        for user_id in action_data.user_ids:
+            activity = SystemActivity(
+                user_id=current_user.id,
+                action=f"bulk_{action_data.action}",
+                target_type="user",
+                target_id=user_id,
+                details={"action": action_data.action, "value": action_data.value}
+            )
+            await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {"message": message}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Bulk action failed: {str(e)}")
+
+@api_router.post("/admin/users/{user_id}/reset-password")
+async def reset_user_password(user_id: str, reset_data: PasswordResetRequest, current_user: User = Depends(get_super_admin)):
+    """Reset a user's password"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    temp_password = f"Reset{secrets.randbelow(9999):04d}!"
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {
+            "$set": {
+                "password": get_password_hash(temp_password),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action="reset_password",
+        target_type="user",
+        target_id=user_id,
+        details={"target_user": user["email"]}
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {
+        "message": "Password reset successfully",
+        "temporary_password": temp_password,
+        "user_email": user["email"]
+    }
+
+# Enhanced Group Management Routes
+@api_router.post("/admin/groups", response_model=Group)
+async def create_group_admin(group_data: GroupCreate, current_user: User = Depends(get_super_admin)):
+    """Create a new group with enhanced features"""
+    group_dict = group_data.dict()
+    group_dict["admin_id"] = current_user.id
+    group_obj = Group(**group_dict)
+    
+    group_dict_for_db = prepare_for_mongo(group_obj.dict())
+    await db.groups.insert_one(group_dict_for_db)
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action="create_group",
+        target_type="group",
+        target_id=group_obj.id,
+        details={"group_name": group_obj.name, "group_type": group_obj.group_type}
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return group_obj
+
+@api_router.get("/admin/groups/all", response_model=List[Group])
+async def get_all_groups_admin(current_user: User = Depends(get_super_admin)):
+    """Get all groups for admin management"""
+    groups = await db.groups.find().sort("created_at", -1).to_list(1000)
+    return [Group(**parse_from_mongo(group)) for group in groups]
+
+@api_router.put("/admin/groups/{group_id}/members")
+async def update_group_membership(group_id: str, membership_data: GroupMembershipUpdate, current_user: User = Depends(get_super_admin)):
+    """Add or remove multiple members from a group"""
+    group = await db.groups.find_one({"id": group_id})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    if membership_data.action == "add":
+        if membership_data.role == "leader":
+            await db.groups.update_one(
+                {"id": group_id},
+                {"$addToSet": {"leaders": {"$each": membership_data.user_ids}}}
+            )
+        await db.groups.update_one(
+            {"id": group_id},
+            {"$addToSet": {"members": {"$each": membership_data.user_ids}}}
+        )
+        message = f"Added {len(membership_data.user_ids)} members to group"
+    
+    elif membership_data.action == "remove":
+        await db.groups.update_one(
+            {"id": group_id},
+            {
+                "$pullAll": {
+                    "members": membership_data.user_ids,
+                    "leaders": membership_data.user_ids
+                }
+            }
+        )
+        message = f"Removed {len(membership_data.user_ids)} members from group"
+    
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action=f"group_membership_{membership_data.action}",
+        target_type="group",
+        target_id=group_id,
+        details={"user_ids": membership_data.user_ids, "role": membership_data.role}
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {"message": message}
+
+# Training Video Management Routes
+@api_router.post("/admin/training/videos", response_model=TrainingVideo)
+async def create_training_video(video_data: TrainingVideoCreate, current_user: User = Depends(get_super_admin)):
+    """Create a new training video entry"""
+    video_dict = video_data.dict()
+    video_dict["created_by"] = current_user.id
+    video_dict["file_path"] = f"/uploads/videos/{uuid.uuid4()}.mp4"  # Placeholder
+    video_obj = TrainingVideo(**video_dict)
+    
+    video_dict_for_db = prepare_for_mongo(video_obj.dict())
+    await db.training_videos.insert_one(video_dict_for_db)
+    
+    return video_obj
+
+@api_router.get("/admin/training/videos", response_model=List[TrainingVideo])
+async def get_training_videos(current_user: User = Depends(get_super_admin)):
+    """Get all training videos"""
+    videos = await db.training_videos.find({"is_active": True}).sort("created_at", -1).to_list(1000)
+    return [TrainingVideo(**parse_from_mongo(video)) for video in videos]
+
+@api_router.get("/admin/training/progress")
+async def get_training_progress(current_user: User = Depends(get_super_admin)):
+    """Get training progress for all users"""
+    progress = await db.video_progress.find().to_list(1000)
+    videos = await db.training_videos.find({"is_active": True}).to_list(1000)
+    users = await db.users.find({"status": AccountStatus.ACTIVE}).to_list(1000)
+    
+    # Calculate completion rates
+    video_stats = {}
+    for video in videos:
+        video_id = video["id"]
+        total_required = len([u for u in users if video.get("mandatory", False) or not video.get("target_roles") or u.get("role") in video.get("target_roles", [])])
+        completed = len([p for p in progress if p["video_id"] == video_id and p["completed"]])
+        
+        video_stats[video_id] = {
+            "video_title": video["title"],
+            "total_required": total_required,
+            "completed": completed,
+            "completion_rate": (completed / total_required * 100) if total_required > 0 else 0
+        }
+    
+    return {"video_stats": video_stats, "total_users": len(users)}
+
+# Meeting Management Routes
+@api_router.post("/admin/meetings", response_model=Meeting)
+async def create_meeting(meeting_data: MeetingCreate, current_user: User = Depends(get_super_admin)):
+    """Create a new meeting"""
+    meeting_dict = meeting_data.dict()
+    meeting_dict["organizer_id"] = current_user.id
+    meeting_obj = Meeting(**meeting_dict)
+    
+    meeting_dict_for_db = prepare_for_mongo(meeting_obj.dict())
+    await db.meetings.insert_one(meeting_dict_for_db)
+    
+    return meeting_obj
+
+@api_router.get("/admin/meetings", response_model=List[Meeting])
+async def get_meetings(current_user: User = Depends(get_super_admin)):
+    """Get all meetings"""
+    meetings = await db.meetings.find().sort("scheduled_date", 1).to_list(1000)
+    return [Meeting(**parse_from_mongo(meeting)) for meeting in meetings]
+
+# Financial Dashboard Routes
+@api_router.post("/admin/donations", response_model=Donation)
+async def record_donation(donation_data: Dict[str, Any], current_user: User = Depends(get_super_admin)):
+    """Record a donation (for testing purposes)"""
+    donation_obj = Donation(**donation_data)
+    donation_dict_for_db = prepare_for_mongo(donation_obj.dict())
+    await db.donations.insert_one(donation_dict_for_db)
+    return donation_obj
+
+@api_router.get("/admin/donations/stats")
+async def get_donation_stats(current_user: User = Depends(get_super_admin)):
+    """Get donation statistics"""
+    # Get donations from last 30 days
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    
+    recent_donations = await db.donations.find({
+        "created_at": {"$gte": thirty_days_ago.isoformat()}
+    }).to_list(1000)
+    
+    total_donations = await db.donations.find().to_list(1000)
+    
+    # Calculate statistics
+    total_amount = sum(d.get("amount", 0) for d in total_donations)
+    recent_amount = sum(d.get("amount", 0) for d in recent_donations)
+    total_count = len(total_donations)
+    recent_count = len(recent_donations)
+    
+    # Category breakdown
+    categories = {}
+    for donation in total_donations:
+        category = donation.get("category", "General Fund")
+        categories[category] = categories.get(category, 0) + donation.get("amount", 0)
+    
+    return {
+        "total_amount": total_amount,
+        "total_count": total_count,
+        "recent_amount": recent_amount,
+        "recent_count": recent_count,
+        "average_donation": total_amount / total_count if total_count > 0 else 0,
+        "categories": categories
+    }
+
+# System Analytics Routes
+@api_router.get("/admin/analytics/overview")
+async def get_system_analytics(current_user: User = Depends(get_super_admin)):
+    """Get system overview analytics"""
+    # User statistics
+    total_users = await db.users.count_documents({})
+    active_users = await db.users.count_documents({"status": AccountStatus.ACTIVE})
+    recent_users = await db.users.count_documents({
+        "created_at": {"$gte": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()}
+    })
+    
+    # Group statistics
+    total_groups = await db.groups.count_documents({"is_active": True})
+    
+    # Activity statistics
+    recent_activities = await db.system_activities.count_documents({
+        "created_at": {"$gte": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()}
+    })
+    
+    return {
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "recent": recent_users,
+            "inactive": total_users - active_users
+        },
+        "groups": {
+            "total": total_groups
+        },
+        "activity": {
+            "recent_actions": recent_activities
+        }
+    }
+
+@api_router.get("/admin/activities", response_model=List[SystemActivity])
+async def get_system_activities(limit: int = 100, current_user: User = Depends(get_super_admin)):
+    """Get recent system activities"""
+    activities = await db.system_activities.find().sort("created_at", -1).limit(limit).to_list(limit)
+    return [SystemActivity(**parse_from_mongo(activity)) for activity in activities]
+
 # System Initialization Route
 @api_router.post("/system/initialize")
 async def initialize_system():
