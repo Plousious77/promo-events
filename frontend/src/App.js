@@ -1485,6 +1485,814 @@ const App = () => {
   );
 };
 
+# Enhanced Content Components
+const GroupManagementContent = ({ groups, users, createGroup, loading }) => {
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newGroup, setNewGroup] = useState({
+    name: '',
+    description: '',
+    group_type: 'Ministry',
+    privacy_setting: 'public',
+    max_members: '',
+    meeting_schedule: ''
+  });
+
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    await createGroup(newGroup);
+    setNewGroup({
+      name: '',
+      description: '',
+      group_type: 'Ministry',
+      privacy_setting: 'public',
+      max_members: '',
+      meeting_schedule: ''
+    });
+    setShowCreateForm(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Group Management</h2>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
+        >
+          Create New Group
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold mb-4">Create New Group</h3>
+          <form onSubmit={handleCreateGroup} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
+                <input
+                  type="text"
+                  value={newGroup.name}
+                  onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Group Type</label>
+                <select
+                  value={newGroup.group_type}
+                  onChange={(e) => setNewGroup({ ...newGroup, group_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="Ministry">Ministry</option>
+                  <option value="Age Group">Age Group</option>
+                  <option value="Service Team">Service Team</option>
+                  <option value="Leadership Circle">Leadership Circle</option>
+                  <option value="Interest Group">Interest Group</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                value={newGroup.description}
+                onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Privacy Setting</label>
+                <select
+                  value={newGroup.privacy_setting}
+                  onChange={(e) => setNewGroup({ ...newGroup, privacy_setting: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                  <option value="invite_only">Invite Only</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Members (Optional)</label>
+                <input
+                  type="number"
+                  value={newGroup.max_members}
+                  onChange={(e) => setNewGroup({ ...newGroup, max_members: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Schedule</label>
+                <input
+                  type="text"
+                  value={newGroup.meeting_schedule}
+                  onChange={(e) => setNewGroup({ ...newGroup, meeting_schedule: e.target.value })}
+                  placeholder="e.g., Sundays 10:00 AM"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+            <div className="flex space-x-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
+              >
+                {loading ? 'Creating...' : 'Create Group'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(false)}
+                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {groups.map((group) => (
+          <div key={group.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">{group.name.charAt(0)}</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{group.name}</h3>
+                  <p className="text-sm text-gray-500">{group.group_type}</p>
+                </div>
+              </div>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                group.privacy_setting === 'public' ? 'bg-green-100 text-green-800' :
+                group.privacy_setting === 'private' ? 'bg-red-100 text-red-800' :
+                'bg-yellow-100 text-yellow-800'
+              }`}>
+                {group.privacy_setting}
+              </span>
+            </div>
+            
+            {group.description && (
+              <p className="text-gray-600 mb-4 text-sm">{group.description}</p>
+            )}
+            
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500">Members:</span>
+                <span className="font-medium">{group.members?.length || 0}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500">Leaders:</span>
+                <span className="font-medium">{group.leaders?.length || 0}</span>
+              </div>
+              {group.max_members && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Max Members:</span>
+                  <span className="font-medium">{group.max_members}</span>
+                </div>
+              )}
+              {group.meeting_schedule && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Schedule:</span>
+                  <span className="font-medium text-xs">{group.meeting_schedule}</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex space-x-2">
+                <button className="flex-1 bg-purple-50 text-purple-600 px-3 py-2 rounded-lg text-sm hover:bg-purple-100 transition-colors">
+                  Manage Members
+                </button>
+                <button className="flex-1 bg-gray-50 text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-100 transition-colors">
+                  Edit Group
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const TrainingCenterContent = ({ trainingVideos, createTrainingVideo, loading }) => {
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newVideo, setNewVideo] = useState({
+    title: '',
+    description: '',
+    category: 'General',
+    mandatory: false,
+    target_roles: []
+  });
+
+  const handleCreateVideo = async (e) => {
+    e.preventDefault();
+    await createTrainingVideo(newVideo);
+    setNewVideo({
+      title: '',
+      description: '',
+      category: 'General',
+      mandatory: false,
+      target_roles: []
+    });
+    setShowCreateForm(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Training Center</h2>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
+        >
+          Add Training Video
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold mb-4">Add Training Video</h3>
+          <form onSubmit={handleCreateVideo} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video Title</label>
+                <input
+                  type="text"
+                  value={newVideo.title}
+                  onChange={(e) => setNewVideo({ ...newVideo, title: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={newVideo.category}
+                  onChange={(e) => setNewVideo({ ...newVideo, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="General">General</option>
+                  <option value="New User">New User</option>
+                  <option value="Admin Training">Admin Training</option>
+                  <option value="Leadership">Leadership</option>
+                  <option value="Technical">Technical</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                value={newVideo.description}
+                onChange={(e) => setNewVideo({ ...newVideo, description: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={newVideo.mandatory}
+                  onChange={(e) => setNewVideo({ ...newVideo, mandatory: e.target.checked })}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">Mandatory Training</span>
+              </label>
+            </div>
+            <div className="flex space-x-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-indigo-500 text-white px-6 py-2 rounded-lg hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+              >
+                {loading ? 'Adding...' : 'Add Video'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(false)}
+                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {trainingVideos.map((video) => (
+          <div key={video.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                video.category === 'New User' ? 'bg-blue-100 text-blue-800' :
+                video.category === 'Admin Training' ? 'bg-purple-100 text-purple-800' :
+                video.category === 'Leadership' ? 'bg-green-100 text-green-800' :
+                video.category === 'Technical' ? 'bg-red-100 text-red-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {video.category}
+              </span>
+              {video.mandatory && (
+                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                  Required
+                </span>
+              )}
+            </div>
+            
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{video.title}</h3>
+            {video.description && (
+              <p className="text-gray-600 mb-4 text-sm">{video.description}</p>
+            )}
+            
+            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+              <span className="text-sm text-gray-500">
+                Created: {new Date(video.created_at).toLocaleDateString()}
+              </span>
+              <div className="flex space-x-2">
+                <button className="text-indigo-600 hover:text-indigo-800 text-sm">
+                  Edit
+                </button>
+                <button className="text-red-600 hover:text-red-800 text-sm">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const MeetingManagementContent = ({ meetings, users, createMeeting, loading }) => {
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newMeeting, setNewMeeting] = useState({
+    title: '',
+    description: '',
+    meeting_type: 'Admin',
+    scheduled_date: '',
+    duration_minutes: 60,
+    location: '',
+    agenda: '',
+    attendees: [],
+    required_attendees: []
+  });
+
+  const handleCreateMeeting = async (e) => {
+    e.preventDefault();
+    const meetingData = {
+      ...newMeeting,
+      scheduled_date: new Date(newMeeting.scheduled_date).toISOString()
+    };
+    await createMeeting(meetingData);
+    setNewMeeting({
+      title: '',
+      description: '',
+      meeting_type: 'Admin',
+      scheduled_date: '',
+      duration_minutes: 60,
+      location: '',
+      agenda: '',
+      attendees: [],
+      required_attendees: []
+    });
+    setShowCreateForm(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Meeting Management</h2>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="bg-pink-500 text-white px-4 py-2 rounded-lg hover:bg-pink-600 transition-colors"
+        >
+          Schedule Meeting
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold mb-4">Schedule New Meeting</h3>
+          <form onSubmit={handleCreateMeeting} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title</label>
+                <input
+                  type="text"
+                  value={newMeeting.title}
+                  onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Type</label>
+                <select
+                  value={newMeeting.meeting_type}
+                  onChange={(e) => setNewMeeting({ ...newMeeting, meeting_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                >
+                  <option value="Admin">Admin</option>
+                  <option value="Ministry">Ministry</option>
+                  <option value="Leadership">Leadership</option>
+                  <option value="All-Hands">All-Hands</option>
+                  <option value="Emergency">Emergency</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={newMeeting.scheduled_date}
+                  onChange={(e) => setNewMeeting({ ...newMeeting, scheduled_date: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  value={newMeeting.duration_minutes}
+                  onChange={(e) => setNewMeeting({ ...newMeeting, duration_minutes: parseInt(e.target.value) })}
+                  min="15"
+                  step="15"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={newMeeting.location}
+                  onChange={(e) => setNewMeeting({ ...newMeeting, location: e.target.value })}
+                  placeholder="Room, Zoom link, etc."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                value={newMeeting.description}
+                onChange={(e) => setNewMeeting({ ...newMeeting, description: e.target.value })}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Agenda</label>
+              <textarea
+                value={newMeeting.agenda}
+                onChange={(e) => setNewMeeting({ ...newMeeting, agenda: e.target.value })}
+                rows={3}
+                placeholder="Meeting agenda and topics..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+              />
+            </div>
+            
+            <div className="flex space-x-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-pink-500 text-white px-6 py-2 rounded-lg hover:bg-pink-600 disabled:opacity-50 transition-colors"
+              >
+                {loading ? 'Scheduling...' : 'Schedule Meeting'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(false)}
+                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {meetings.map((meeting) => (
+          <div key={meeting.id} className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{meeting.title}</h3>
+                <p className="text-sm text-gray-500">{meeting.meeting_type} Meeting</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                new Date(meeting.scheduled_date) > new Date() 
+                  ? 'bg-blue-100 text-blue-800' 
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {new Date(meeting.scheduled_date) > new Date() ? 'Upcoming' : 'Past'}
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500">Date & Time:</span>
+                <p className="font-medium">
+                  {new Date(meeting.scheduled_date).toLocaleDateString()} at {' '}
+                  {new Date(meeting.scheduled_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-500">Duration:</span>
+                <p className="font-medium">{meeting.duration_minutes} minutes</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Location:</span>
+                <p className="font-medium">{meeting.location || 'TBD'}</p>
+              </div>
+            </div>
+            
+            {meeting.description && (
+              <div className="mt-4">
+                <span className="text-gray-500 text-sm">Description:</span>
+                <p className="text-sm mt-1">{meeting.description}</p>
+              </div>
+            )}
+            
+            {meeting.agenda && (
+              <div className="mt-4">
+                <span className="text-gray-500 text-sm">Agenda:</span>
+                <p className="text-sm mt-1 whitespace-pre-line">{meeting.agenda}</p>
+              </div>
+            )}
+            
+            <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+              <span className="text-sm text-gray-500">
+                Attendees: {meeting.attendees?.length || 0} invited
+              </span>
+              <div className="flex space-x-2">
+                <button className="text-pink-600 hover:text-pink-800 text-sm">
+                  Edit
+                </button>
+                <button className="text-gray-600 hover:text-gray-800 text-sm">
+                  Manage Attendees
+                </button>
+                <button className="text-red-600 hover:text-red-800 text-sm">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const FinancialDashboardContent = ({ donations }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Financial Dashboard</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Donations</p>
+              <p className="text-3xl font-bold text-gray-900">
+                ${donations?.total_amount?.toLocaleString() || '0'}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">💝</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Donors</p>
+              <p className="text-3xl font-bold text-gray-900">{donations?.total_count || 0}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">👥</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Average Donation</p>
+              <p className="text-3xl font-bold text-gray-900">
+                ${Math.round(donations?.average_donation || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">📊</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Recent (30 days)</p>
+              <p className="text-3xl font-bold text-gray-900">
+                ${donations?.recent_amount?.toLocaleString() || '0'}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">📈</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {donations?.categories && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Donations by Category</h3>
+          <div className="space-y-4">
+            {Object.entries(donations.categories).map(([category, amount]) => (
+              <div key={category} className="flex items-center justify-between">
+                <span className="text-gray-700">{category}</span>
+                <div className="flex items-center space-x-2">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-500 h-2 rounded-full"
+                      style={{ 
+                        width: `${(amount / donations.total_amount) * 100}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <span className="font-medium text-gray-900">
+                    ${amount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SystemAnalyticsContent = ({ analytics }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">System Analytics</h2>
+      
+      {analytics && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">User Statistics</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Total Users</span>
+                  <span className="font-bold text-2xl text-purple-600">{analytics.users.total}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Active Users</span>
+                  <span className="font-bold text-lg text-green-600">{analytics.users.active}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">New (7 days)</span>
+                  <span className="font-bold text-lg text-blue-600">{analytics.users.recent}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Inactive</span>
+                  <span className="font-bold text-lg text-red-600">{analytics.users.inactive}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Group Statistics</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Total Groups</span>
+                  <span className="font-bold text-2xl text-blue-600">{analytics.groups.total}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Statistics</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Recent Actions</span>
+                  <span className="font-bold text-2xl text-teal-600">{analytics.activity.recent_actions}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">User Growth Chart</h3>
+            <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
+              <p className="text-gray-500">Chart visualization would go here</p>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+const SystemActivitiesContent = ({ activities, users }) => {
+  const getUserName = (userId) => {
+    const user = users.find(u => u.id === userId);
+    return user ? user.full_name : 'Unknown User';
+  };
+
+  const getActionIcon = (action) => {
+    switch (action) {
+      case 'create_group': return '🫂';
+      case 'bulk_activate': return '✅';
+      case 'bulk_deactivate': return '❌';
+      case 'reset_password': return '🔑';
+      case 'group_membership_add': return '➕';
+      case 'group_membership_remove': return '➖';
+      default: return '📝';
+    }
+  };
+
+  const getActionDescription = (activity) => {
+    switch (activity.action) {
+      case 'create_group':
+        return `Created group "${activity.details?.group_name}"`;
+      case 'bulk_activate':
+        return 'Activated multiple user accounts';
+      case 'bulk_deactivate':
+        return 'Deactivated multiple user accounts';
+      case 'reset_password':
+        return `Reset password for ${activity.details?.target_user}`;
+      case 'group_membership_add':
+        return 'Added members to a group';
+      case 'group_membership_remove':
+        return 'Removed members from a group';
+      default:
+        return activity.action.replace('_', ' ');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">System Activities</h2>
+      
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Activities</h3>
+        </div>
+        <div className="divide-y divide-gray-200">
+          {activities.length === 0 ? (
+            <div className="px-6 py-8 text-center text-gray-500">
+              No recent activities found
+            </div>
+          ) : (
+            activities.map((activity) => (
+              <div key={activity.id} className="px-6 py-4 flex items-center space-x-4">
+                <div className="flex-shrink-0">
+                  <span className="text-2xl">{getActionIcon(activity.action)}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-900">
+                      {getUserName(activity.user_id)}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(activity.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {getActionDescription(activity)}
+                  </p>
+                  {activity.target_type && (
+                    <p className="text-xs text-gray-400">
+                      Target: {activity.target_type}
+                      {activity.ip_address && ` • IP: ${activity.ip_address}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Dashboard Router Component
 const Dashboard = () => {
   const { user } = useAuth();
