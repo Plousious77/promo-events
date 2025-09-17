@@ -694,11 +694,30 @@ const SuperAdminPortal = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {navigation.find(item => item.id === activeTab)?.name || 'Super Admin Portal'}
+                {isUserView ? 'Member Dashboard' : (navigation.find(item => item.id === activeTab)?.name || 'Super Admin Portal')}
               </h1>
-              <p className="text-gray-600 mt-1">Complete system control and management</p>
+              <p className="text-gray-600 mt-1">
+                {isUserView ? 'Regular member experience' : 'Complete system control and management'}
+              </p>
+              {isUserView && (
+                <div className="mt-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium inline-block">
+                  👁️ Viewing as Regular Member
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-4">
+              {/* Portal Switch Button */}
+              <button
+                onClick={() => setIsUserView(!isUserView)}
+                className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+                  isUserView 
+                    ? 'bg-purple-500 text-white hover:bg-purple-600' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {isUserView ? '🔧 Switch to Admin View' : '👤 Switch to User View'}
+              </button>
+              
               <div className="flex items-center space-x-2 bg-gradient-to-r from-purple-100 to-purple-200 px-4 py-2 rounded-full">
                 <span className="text-2xl">💰</span>
                 <span className="font-bold text-purple-700">{user?.coins?.toLocaleString() || 0} YHWH Coins</span>
