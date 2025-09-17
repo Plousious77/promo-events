@@ -597,9 +597,15 @@ const SuperAdminDashboard = () => {
 
   const navigation = [
     { id: 'dashboard', name: 'Dashboard', icon: '🏠' },
-    { id: 'users', name: 'Users', icon: '👥' },
+    { id: 'users', name: 'User Management', icon: '👥' },
+    { id: 'groups', name: 'Group Management', icon: '🫂' },
+    { id: 'training', name: 'Training Center', icon: '🎓' },
+    { id: 'meetings', name: 'Meeting Management', icon: '📅' },
+    { id: 'finances', name: 'Financial Dashboard', icon: '💰' },
+    { id: 'analytics', name: 'System Analytics', icon: '📊' },
     { id: 'admin-requests', name: 'Admin Requests', icon: '📋' },
     { id: 'access-codes', name: 'Access Codes', icon: '🔑' },
+    { id: 'activities', name: 'System Activities', icon: '📝' },
     { id: 'settings', name: 'Settings', icon: '⚙️' },
   ];
 
