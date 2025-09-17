@@ -1778,8 +1778,160 @@ const Dashboard = () => {
 
 // Regular Member View Component (What normal users see)
 const RegularMemberView = ({ user }) => {
+  const { API } = useAuth();
+  const [upcomingTasks, setUpcomingTasks] = useState([]);
+  const [attendanceStats, setAttendanceStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    fetchUpcomingTasks();
+    fetchAttendanceStats();
+  }, []);
+
+  const fetchUpcomingTasks = async () => {
+    try {
+      const response = await axios.get(`${API}/my-tasks/upcoming`);
+      setUpcomingTasks(response.data);
+    } catch (error) {
+      console.error('Failed to fetch upcoming tasks:', error);
+    }
+  };
+
+  const fetchAttendanceStats = async () => {
+    try {
+      const response = await axios.get(`${API}/my-attendance/stats`);
+      setAttendanceStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch attendance stats:', error);
+    }
+  };
+
+  const handlePunchIn = async (taskId) => {
+    setLoading(true);
+    try {
+      // Get user's location for GPS verification
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const response = await axios.post(`${API}/tasks/${taskId}/punch-in`, {
+                task_id: taskId,
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+              });
+              
+              setMessage({ 
+                type: response.data.reward_status.includes('NO REWARDS') ? 'error' : 'success', 
+                text: `${response.data.message} - ${response.data.reward_status}` 
+              });
+              fetchUpcomingTasks();
+              fetchAttendanceStats();
+            } catch (error) {
+              setMessage({ 
+                type: 'error', 
+                text: error.response?.data?.detail || 'Failed to punch in' 
+              });
+            } finally {
+              setLoading(false);
+            }
+          },
+          async () => {
+            // Location denied, punch in without GPS
+            try {
+              const response = await axios.post(`${API}/tasks/${taskId}/punch-in`, {
+                task_id: taskId
+              });
+              
+              setMessage({ 
+                type: response.data.reward_status.includes('NO REWARDS') ? 'error' : 'success', 
+                text: `${response.data.message} - ${response.data.reward_status}` 
+              });
+              fetchUpcomingTasks();
+              fetchAttendanceStats();
+            } catch (error) {
+              setMessage({ 
+                type: 'error', 
+                text: error.response?.data?.detail || 'Failed to punch in' 
+              });
+            } finally {
+              setLoading(false);
+            }
+          }
+        );
+      } else {
+        // No geolocation support
+        const response = await axios.post(`${API}/tasks/${taskId}/punch-in`, {
+          task_id: taskId
+        });
+        
+        setMessage({ 
+          type: response.data.reward_status.includes('NO REWARDS') ? 'error' : 'success', 
+          text: `${response.data.message} - ${response.data.reward_status}` 
+        });
+        fetchUpcomingTasks();
+        fetchAttendanceStats();
+        setLoading(false);
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to punch in' 
+      });
+      setLoading(false);
+    }
+  };
+
+  const handlePunchOut = async (taskId) => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API}/tasks/${taskId}/punch-out`, {
+        task_id: taskId,
+        task_rating: 5 // Default good rating
+      });
+      
+      setMessage({ 
+        type: 'success', 
+        text: `${response.data.message} Total earned: ${response.data.total_points_earned}pts + ${response.data.total_coins_earned} coins` 
+      });
+      fetchUpcomingTasks();
+      fetchAttendanceStats();
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to punch out' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDateTime = (dateString) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const getTimeUntilStart = (minutes) => {
+    if (minutes < 0) return 'Started';
+    if (minutes === 0) return 'Starting now';
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Message Display */}
+      {message && (
+        <div className={`px-4 py-3 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-600' 
+            : 'bg-red-50 border border-red-200 text-red-600'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl shadow-lg p-8 text-white">
         <div className="flex items-center justify-between">
@@ -1795,7 +1947,7 @@ const RegularMemberView = ({ user }) => {
       </div>
 
       {/* Member Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -1822,18 +1974,128 @@ const RegularMemberView = ({ user }) => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">My Groups</p>
-              <p className="text-3xl font-bold text-blue-600">1</p>
-              <p className="text-xs text-blue-500">Active memberships</p>
+        {attendanceStats && (
+          <>
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Punctuality Rate</p>
+                  <p className="text-3xl font-bold text-blue-600">{attendanceStats.punctuality_rate}%</p>
+                  <p className="text-xs text-blue-500">On-time arrivals</p>
+                </div>
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <span className="text-2xl">⏰</span>
+                </div>
+              </div>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <span className="text-2xl">🫂</span>
+
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Current Streak</p>
+                  <p className="text-3xl font-bold text-orange-600">{attendanceStats.current_streak}</p>
+                  <p className="text-xs text-orange-500">On-time tasks</p>
+                </div>
+                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <span className="text-2xl">🔥</span>
+                </div>
+              </div>
             </div>
+          </>
+        )}
+      </div>
+
+      {/* Upcoming Tasks - Real Implementation */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-6">My Upcoming Tasks</h3>
+        {upcomingTasks.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-4">📅</div>
+            <p className="text-gray-600">No upcoming tasks assigned</p>
+            <p className="text-sm text-gray-500 mt-2">Check back later for new assignments</p>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            {upcomingTasks.map((taskData) => {
+              const task = taskData.task;
+              const attendance = taskData.attendance;
+              const timeUntilStart = taskData.time_until_start;
+              const canPunchIn = taskData.can_punch_in;
+              
+              return (
+                <div key={task.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center text-white font-bold">
+                      ⏰
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{task.name}</h4>
+                      <p className="text-sm text-gray-600">{task.category} • {formatDateTime(task.start_datetime)}</p>
+                      <p className="text-xs text-gray-500">
+                        {timeUntilStart < 0 ? 'Started' : `Starts in ${getTimeUntilStart(timeUntilStart)}`}
+                        {task.location_address && ` • ${task.location_address}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-green-600">+{task.points_reward + task.punctuality_bonus_points} Points</p>
+                      <p className="text-sm text-purple-600">+{task.coins_reward + task.punctuality_bonus_coins} Coins</p>
+                      <p className="text-xs text-gray-500">
+                        {timeUntilStart > 15 ? 'Future task' : 
+                         timeUntilStart > 0 ? 'Ready to punch in' : 
+                         timeUntilStart > -15 ? 'Grace period (50% rewards)' : 
+                         'No rewards available'}
+                      </p>
+                    </div>
+                    
+                    {/* Punch In/Out Buttons */}
+                    <div className="flex flex-col space-y-2">
+                      {!attendance?.punch_in_time ? (
+                        <button
+                          onClick={() => handlePunchIn(task.id)}
+                          disabled={loading || !canPunchIn}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            canPunchIn
+                              ? 'bg-green-500 text-white hover:bg-green-600'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {loading ? 'Punching In...' : 'Punch In'}
+                        </button>
+                      ) : !attendance?.punch_out_time ? (
+                        <button
+                          onClick={() => handlePunchOut(task.id)}
+                          disabled={loading}
+                          className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
+                        >
+                          {loading ? 'Punching Out...' : 'Punch Out'}
+                        </button>
+                      ) : (
+                        <span className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium">
+                          Completed
+                        </span>
+                      )}
+                      
+                      {attendance?.punch_in_time && (
+                        <div className="text-xs text-center">
+                          <p className="text-gray-500">Punched in:</p>
+                          <p className="font-medium">{formatDateTime(attendance.punch_in_time)}</p>
+                          {attendance.is_late && (
+                            <p className={`font-medium ${attendance.is_within_grace_period ? 'text-yellow-600' : 'text-red-600'}`}>
+                              {attendance.minutes_late} min late
+                              {attendance.is_within_grace_period ? ' (Grace)' : ' (No Rewards)'}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
@@ -1841,15 +2103,15 @@ const RegularMemberView = ({ user }) => {
         <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <button className="p-4 bg-blue-50 hover:bg-blue-100 rounded-xl border-2 border-blue-200 hover:border-blue-300 transition-all text-center">
-            <div className="text-3xl mb-2">📅</div>
-            <h4 className="font-semibold text-blue-700">My Tasks</h4>
-            <p className="text-sm text-blue-600">View assignments</p>
+            <div className="text-3xl mb-2">📋</div>
+            <h4 className="font-semibold text-blue-700">All My Tasks</h4>
+            <p className="text-sm text-blue-600">View all assignments</p>
           </button>
           
           <button className="p-4 bg-green-50 hover:bg-green-100 rounded-xl border-2 border-green-200 hover:border-green-300 transition-all text-center">
-            <div className="text-3xl mb-2">⏰</div>
-            <h4 className="font-semibold text-green-700">Punch In/Out</h4>
-            <p className="text-sm text-green-600">Track attendance</p>
+            <div className="text-3xl mb-2">📊</div>
+            <h4 className="font-semibold text-green-700">My Stats</h4>
+            <p className="text-sm text-green-600">Attendance analytics</p>
           </button>
           
           <button className="p-4 bg-purple-50 hover:bg-purple-100 rounded-xl border-2 border-purple-200 hover:border-purple-300 transition-all text-center">
@@ -1859,48 +2121,10 @@ const RegularMemberView = ({ user }) => {
           </button>
           
           <button className="p-4 bg-orange-50 hover:bg-orange-100 rounded-xl border-2 border-orange-200 hover:border-orange-300 transition-all text-center">
-            <div className="text-3xl mb-2">📊</div>
-            <h4 className="font-semibold text-orange-700">My Progress</h4>
-            <p className="text-sm text-orange-600">View achievements</p>
+            <div className="text-3xl mb-2">🏆</div>
+            <h4 className="font-semibold text-orange-700">Achievements</h4>
+            <p className="text-sm text-orange-600">View rewards earned</p>
           </button>
-        </div>
-      </div>
-
-      {/* Upcoming Tasks/Events */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-6">Upcoming Activities</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
-                📅
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900">Sunday Service</h4>
-                <p className="text-sm text-gray-600">Tomorrow at 10:00 AM</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-bold text-green-600">+50 Points</p>
-              <p className="text-xs text-gray-500">Attendance reward</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                📖
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900">Bible Study</h4>
-                <p className="text-sm text-gray-600">Wednesday at 7:00 PM</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-bold text-green-600">+30 Points</p>
-              <p className="text-xs text-gray-500">Study participation</p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1911,6 +2135,7 @@ const RegularMemberView = ({ user }) => {
           <div>
             <h4 className="font-semibold text-blue-900">Member Experience Preview</h4>
             <p className="text-blue-700">This is what regular members see when they log in. You can switch back to Admin View using the toggle button above.</p>
+            <p className="text-blue-700 mt-1"><strong>Time Tracking System:</strong> Members can punch in/out of assigned tasks and earn rewards based on punctuality!</p>
           </div>
         </div>
       </div>
