@@ -1321,6 +1321,44 @@ const SuperAdminDashboard = () => {
             </div>
           )}
 
+          {activeTab === 'groups' && (
+            <GroupManagementContent 
+              groups={groups}
+              users={users}
+              createGroup={createGroup}
+              loading={loading}
+            />
+          )}
+
+          {activeTab === 'training' && (
+            <TrainingCenterContent 
+              trainingVideos={trainingVideos}
+              createTrainingVideo={createTrainingVideo}
+              loading={loading}
+            />
+          )}
+
+          {activeTab === 'meetings' && (
+            <MeetingManagementContent 
+              meetings={meetings}
+              users={users}
+              createMeeting={createMeeting}
+              loading={loading}
+            />
+          )}
+
+          {activeTab === 'finances' && (
+            <FinancialDashboardContent donations={donations} />
+          )}
+
+          {activeTab === 'analytics' && (
+            <SystemAnalyticsContent analytics={analytics} />
+          )}
+
+          {activeTab === 'activities' && (
+            <SystemActivitiesContent activities={activities} users={users} />
+          )}
+
           {activeTab === 'settings' && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl shadow-sm p-6">
