@@ -185,6 +185,7 @@ class User(BaseModel):
     phone: Optional[str] = None
     role: str = UserRole.MEMBER
     status: str = AccountStatus.PENDING_VERIFICATION
+    group_id: Optional[str] = None
     profile_picture: Optional[str] = None
     bio: Optional[str] = None
     emergency_contact: Optional[str] = None
