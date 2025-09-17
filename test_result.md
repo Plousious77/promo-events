@@ -282,7 +282,6 @@ Previous context: Fixed critical Agora backend token generation and frontend Ago
 
 ## test_plan:
   current_focus:
-    - "Implement Agora Managed Services API Integration"
     - "Implement Enhanced Church Meeting Interface"
   stuck_tasks: []
   test_all: false
