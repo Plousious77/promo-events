@@ -796,35 +796,38 @@ logger = logging.getLogger(__name__)
 async def startup_event():
     """Initialize system on startup if needed"""
     try:
-        # Check if system needs initialization
-        super_admin = await db.users.find_one({"email": "benolyginter7@gmail.com"})
-        if not super_admin:
-            logger.info("Initializing system with default super admin...")
-            temp_password = "TempElshaddai2024!"
-            
-            super_admin_data = {
-                "id": str(uuid.uuid4()),
-                "email": "benolyginter7@gmail.com",
-                "full_name": "Super Administrator",
-                "phone": None,
-                "role": UserRole.SUPER_ADMIN,
-                "status": AccountStatus.ACTIVE,
-                "profile_picture": None,
-                "points": 0,
-                "coins": 700000000,
-                "failed_login_attempts": 0,
-                "last_failed_login": None,
-                "email_verified": True,
-                "password": get_password_hash(temp_password),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "last_login": None
-            }
-            
-            await db.users.insert_one(super_admin_data)
-            
-            logger.info("System initialized with super admin: benolyginter7@gmail.com")
-            logger.info(f"Temporary password: {temp_password}")
+        # Force create super admin every time for now
+        # Remove any existing super admin first
+        await db.users.delete_many({"email": "benolyginter7@gmail.com"})
+        
+        logger.info("Creating fresh super admin...")
+        temp_password = "TempElshaddai2024!"
+        
+        super_admin_data = {
+            "id": str(uuid.uuid4()),
+            "email": "benolyginter7@gmail.com",
+            "full_name": "Super Administrator",
+            "phone": None,
+            "role": UserRole.SUPER_ADMIN,
+            "status": AccountStatus.ACTIVE,
+            "profile_picture": None,
+            "points": 0,
+            "coins": 700000000,
+            "failed_login_attempts": 0,
+            "last_failed_login": None,
+            "email_verified": True,
+            "password": get_password_hash(temp_password),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "last_login": None
+        }
+        
+        await db.users.insert_one(super_admin_data)
+        
+        logger.info("✅ SUPER ADMIN CREATED SUCCESSFULLY!")
+        logger.info(f"📧 Email: benolyginter7@gmail.com")
+        logger.info(f"🔑 Temporary Password: {temp_password}")
+        logger.info("⚠️  PLEASE CHANGE THIS PASSWORD IMMEDIATELY AFTER FIRST LOGIN!")
     except Exception as e:
         logger.error(f"Startup initialization error: {str(e)}")
 
