@@ -2650,11 +2650,14 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
   const handleJoinRoom = async (room) => {
     setLoading(true);
     try {
+      // Determine user's Agora role based on church role
+      const userAgoraRole = getUserAgoraRole(user?.role);
+      
       // Generate Agora token
       const tokenResponse = await axios.post(`${API}/agora/token`, {
         channel_name: room.channel_name,
         uid: Math.floor(Math.random() * 10000) + 1000,
-        role: 'host',
+        role: userAgoraRole, // Use the mapped role
         expire_time: 7200
       });
 
@@ -2663,7 +2666,14 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
         channel: room.channel_name,
         token: tokenResponse.data.token,
         uid: tokenResponse.data.uid,
+        role: userAgoraRole, // This must never be undefined
       };
+
+      // Validate config before setting
+      if (!config.role || (config.role !== 'host' && config.role !== 'audience')) {
+        console.error('Invalid Agora role detected:', config.role);
+        config.role = 'audience'; // Fallback to audience
+      }
 
       setAgoraConfig(config);
       setActiveRoom(room);
