@@ -1485,7 +1485,7 @@ const App = () => {
   );
 };
 
-# Enhanced Content Components
+// Enhanced Content Components
 const GroupManagementContent = ({ groups, users, createGroup, loading }) => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newGroup, setNewGroup] = useState({
