@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import DailyIframe from '@daily-co/daily-js';
+import AgoraUIKit from 'agora-react-uikit';
 import './App.css';
 
 // Context for authentication
