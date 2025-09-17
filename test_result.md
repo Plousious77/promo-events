@@ -272,10 +272,12 @@ Previous context: Fixed critical Agora backend token generation and frontend Ago
   run_ui: false
 
 ## test_plan:
-  current_focus: []
+  current_focus:
+    - "Implement Agora Managed Services API Integration"
+    - "Implement Enhanced Church Meeting Interface"
   stuck_tasks: []
   test_all: false
-  test_priority: "critical_first"
+  test_priority: "high_first"
 
 ## agent_communication:
     - agent: "user"
