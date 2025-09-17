@@ -1568,10 +1568,14 @@ class ChurchAgoraClient:
     def generate_rtc_token(self, channel_name: str, uid: int, role: str, expire_time: int = 3600) -> str:
         """Generate Agora RTC token for video access"""
         try:
-            from agora_token_builder import RtcTokenBuilder, Role_Publisher, Role_Subscriber
+            from agora_token_builder import RtcTokenBuilder
             
-            # Determine role privilege
-            privilege = Role_Publisher if role == 'host' else Role_Subscriber
+            # Use the correct role constants
+            # Publisher role = 1, Subscriber role = 2
+            if role == 'host' or role == 'publisher':
+                role_type = 1  # Publisher role
+            else:
+                role_type = 2  # Subscriber role
             
             # Calculate expiration timestamp
             expiration_timestamp = int(datetime.now().timestamp()) + expire_time
@@ -1582,7 +1586,7 @@ class ChurchAgoraClient:
                 self.app_certificate,
                 channel_name,
                 uid,
-                privilege,
+                role_type,
                 expiration_timestamp
             )
             
