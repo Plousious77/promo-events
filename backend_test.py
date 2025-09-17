@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 class ChurchYouthAppTester:
-    def __init__(self, base_url="https://church-youth-app.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://ecclesia-hub.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.member_token = None
