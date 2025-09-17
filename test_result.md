@@ -111,6 +111,21 @@ CRITICAL BUG FIX: Fix Agora token generation error "500: Token generation failed
 Previous context: Implement Phase 2: Video Conferencing System with WebRTC-based solution (Daily.co or Agora) with support for up to 1,000 participants, group integration, cloud recording, screen sharing, host controls, live streaming, Scripture verse display, and auto-recording to 7TB cloud storage.
 
 ## backend:
+  - task: "Fix Agora token generation import error"
+    implemented: true
+    working: "unknown"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "critical"
+    needs_retesting: true
+    status_history:
+        - working: false
+          agent: "user"
+          comment: "User reported 500 error: 'cannot import name Role_Publisher from agora_token_builder'. This is a critical bug preventing video conferencing functionality."
+        - working: "unknown"
+          agent: "main"
+          comment: "FIXED: Updated agora_token_builder imports by removing deprecated Role_Publisher and Role_Subscriber classes. Now using correct role constants: 1 for Publisher role, 2 for Subscriber role. Updated generate_rtc_token method in ChurchAgoraClient class. Fix applied to line 1571-1587 in server.py. Needs backend testing to verify token generation works."
+
   - task: "Daily.co API client integration"
     implemented: true
     working: true
