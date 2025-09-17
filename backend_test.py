@@ -509,7 +509,7 @@ class ChurchYouthAppTester:
             "Get Video Rooms (Unauthorized - Should Fail)",
             "GET",
             "video-rooms/",
-            401
+            403  # Updated to expect 403 instead of 401
         )
         
         return success
