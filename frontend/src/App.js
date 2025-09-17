@@ -636,6 +636,7 @@ const SuperAdminPortal = () => {
     { id: 'groups', name: 'Group Management', icon: '🫂', color: 'bg-purple-500' },
     { id: 'users', name: 'User Management', icon: '👥', color: 'bg-green-500' },
     { id: 'meetings', name: 'Meeting Management', icon: '📅', color: 'bg-indigo-500' },
+    { id: 'video-conference', name: 'Video Conference', icon: '📹', color: 'bg-red-500' },
     { id: 'activities', name: 'System Activities', icon: '📝', color: 'bg-orange-500' },
     { id: 'profile', name: 'My Profile', icon: '👤', color: 'bg-pink-500' },
     { id: 'system', name: 'System Tools', icon: '⚙️', color: 'bg-red-500' },
