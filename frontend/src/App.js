@@ -2571,6 +2571,7 @@ const RegularMemberView = ({ user }) => {
 
 // Church Video Conference Content Component - Complete Agora Implementation
 const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
+  const { user } = useAuth(); // Get current user for role mapping
   const [churchVideoRooms, setChurchVideoRooms] = useState([]);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [activeRoom, setActiveRoom] = useState(null);
@@ -2590,6 +2591,19 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     streaming_platforms: [],
     group_id: ''
   });
+
+  // Map user role to Agora role for church-specific permissions
+  const getUserAgoraRole = (userType) => {
+    switch(userType) {
+      case 'super_admin':
+      case 'group_admin':
+      case 'team_leader':
+        return 'host'; // Church leaders get host privileges
+      case 'member':
+      default:
+        return 'audience'; // Regular members are audience
+    }
+  };
 
   useEffect(() => {
     fetchChurchVideoRooms();
