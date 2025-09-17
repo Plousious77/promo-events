@@ -662,6 +662,83 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const bulkUserAction = async (action, value = null) => {
+    if (selectedUsers.length === 0) {
+      setMessage({ type: 'error', text: 'Please select users first' });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await axios.post(`${API}/admin/users/bulk-action`, {
+        user_ids: selectedUsers,
+        action: action,
+        value: value
+      });
+      setMessage({ type: 'success', text: `Bulk ${action} completed successfully!` });
+      setSelectedUsers([]);
+      fetchUsers();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || `Failed to perform bulk ${action}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetUserPassword = async (userId) => {
+    try {
+      const response = await axios.post(`${API}/admin/users/${userId}/reset-password`, {
+        user_id: userId,
+        send_email: true
+      });
+      setMessage({ 
+        type: 'success', 
+        text: `Password reset! Temporary password: ${response.data.temporary_password}` 
+      });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to reset password' });
+    }
+  };
+
+  const createGroup = async (groupData) => {
+    try {
+      setLoading(true);
+      await axios.post(`${API}/admin/groups`, groupData);
+      setMessage({ type: 'success', text: 'Group created successfully!' });
+      fetchGroups();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create group' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createTrainingVideo = async (videoData) => {
+    try {
+      setLoading(true);
+      await axios.post(`${API}/admin/training/videos`, videoData);
+      setMessage({ type: 'success', text: 'Training video created successfully!' });
+      fetchTrainingVideos();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create training video' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createMeeting = async (meetingData) => {
+    try {
+      setLoading(true);
+      await axios.post(`${API}/admin/meetings`, meetingData);
+      setMessage({ type: 'success', text: 'Meeting created successfully!' });
+      fetchMeetings();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create meeting' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const navigation = [
     { id: 'dashboard', name: 'Dashboard', icon: '🏠' },
     { id: 'users', name: 'User Management', icon: '👥' },
