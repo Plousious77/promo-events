@@ -68,3 +68,4 @@ uvicorn==0.25.0
 watchfiles==1.1.0
 httpx==0.25.2
 aiofiles==23.2.1
+geopy==2.4.1
