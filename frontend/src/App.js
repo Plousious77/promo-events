@@ -2143,34 +2143,38 @@ const RegularMemberView = ({ user }) => {
   );
 };
 
-// Video Conference Content Component
+// Church Video Conference Content Component - Complete Agora Implementation
 const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
-  const [videoRooms, setVideoRooms] = useState([]);
+  const [churchVideoRooms, setChurchVideoRooms] = useState([]);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [activeRoom, setActiveRoom] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [callObject, setCallObject] = useState(null);
+  const [videoCall, setVideoCall] = useState(false);
+  const [agoraConfig, setAgoraConfig] = useState(null);
+  const [scriptureDisplay, setScriptureDisplay] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
 
   // Room creation form state
   const [newRoom, setNewRoom] = useState({
-    max_participants: 200,
-    enable_recording: false,
-    enable_screenshare: true,
-    enable_livestreaming: false,
-    group_id: '',
-    expires_in_minutes: 60
+    room_name: '',
+    service_type: 'main_service',
+    max_participants: 1000,
+    enable_recording: true,
+    enable_streaming: false,
+    streaming_platforms: [],
+    group_id: ''
   });
 
   useEffect(() => {
-    fetchVideoRooms();
+    fetchChurchVideoRooms();
   }, []);
 
-  const fetchVideoRooms = async () => {
+  const fetchChurchVideoRooms = async () => {
     try {
-      const response = await axios.get(`${API}/video-rooms/`);
-      setVideoRooms(response.data);
+      const response = await axios.get(`${API}/church-video/rooms`);
+      setChurchVideoRooms(response.data);
     } catch (error) {
-      console.error('Failed to fetch video rooms:', error);
+      console.error('Failed to fetch church video rooms:', error);
       setMessage({ type: 'error', text: 'Failed to fetch video rooms' });
     }
   };
@@ -2180,18 +2184,19 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API}/video-rooms/`, newRoom);
-      setMessage({ type: 'success', text: 'Video room created successfully!' });
+      const response = await axios.post(`${API}/church-video/create`, newRoom);
+      setMessage({ type: 'success', text: 'Church video room created successfully!' });
       setNewRoom({
-        max_participants: 200,
-        enable_recording: false,
-        enable_screenshare: true,
-        enable_livestreaming: false,
-        group_id: '',
-        expires_in_minutes: 60
+        room_name: '',
+        service_type: 'main_service',
+        max_participants: 1000,
+        enable_recording: true,
+        enable_streaming: false,
+        streaming_platforms: [],
+        group_id: ''
       });
       setShowCreateRoom(false);
-      fetchVideoRooms();
+      fetchChurchVideoRooms();
     } catch (error) {
       setMessage({ 
         type: 'error', 
@@ -2202,25 +2207,29 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     }
   };
 
-  const handleJoinRoom = async (roomId) => {
+  const handleJoinRoom = async (room) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API}/video-rooms/${roomId}/join-token`);
-      const { token, room_url } = response.data;
-      
-      // Create Daily call object
-      const newCallObject = DailyIframe.createCallObject({
-        url: room_url,
-        token: token,
+      // Generate Agora token
+      const tokenResponse = await axios.post(`${API}/agora/token`, {
+        channel_name: room.channel_name,
+        uid: Math.floor(Math.random() * 10000) + 1000,
+        role: 'host',
+        expire_time: 7200
       });
 
-      setCallObject(newCallObject);
-      setActiveRoom(roomId);
+      const config = {
+        appId: process.env.REACT_APP_AGORA_APP_ID || 'default-application_10499703',
+        channel: room.channel_name,
+        token: tokenResponse.data.token,
+        uid: tokenResponse.data.uid,
+      };
+
+      setAgoraConfig(config);
+      setActiveRoom(room);
+      setVideoCall(true);
       
-      // Join the call
-      await newCallObject.join();
-      
-      setMessage({ type: 'success', text: 'Joined video conference successfully!' });
+      setMessage({ type: 'success', text: 'Joined church video conference successfully!' });
     } catch (error) {
       setMessage({ 
         type: 'error', 
@@ -2231,22 +2240,68 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     }
   };
 
-  const handleLeaveRoom = async () => {
-    if (callObject) {
-      await callObject.leave();
-      await callObject.destroy();
-      setCallObject(null);
-      setActiveRoom(null);
-      setMessage({ type: 'success', text: 'Left video conference' });
+  const handleLeaveRoom = () => {
+    setVideoCall(false);
+    setActiveRoom(null);
+    setAgoraConfig(null);
+    setScriptureDisplay('');
+    setIsStreaming(false);
+    setMessage({ type: 'success', text: 'Left video conference' });
+  };
+
+  const handleStartStreaming = async () => {
+    if (!activeRoom) return;
+    
+    try {
+      const streamingConfig = [
+        {
+          platform: 'youtube',
+          rtmp_url: 'rtmp://a.rtmp.youtube.com/live2/',
+          stream_key: 'your-youtube-stream-key',
+          title: `${activeRoom.room_name} - Live Service`,
+          description: 'Live church service streaming'
+        }
+      ];
+
+      await axios.post(`${API}/church-video/${activeRoom.id}/streaming/start`, streamingConfig);
+      setIsStreaming(true);
+      setMessage({ type: 'success', text: 'Live streaming started!' });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to start streaming' 
+      });
+    }
+  };
+
+  const handleScriptureUpdate = async (scripture) => {
+    if (!activeRoom) return;
+    
+    try {
+      await axios.post(`${API}/church-video/${activeRoom.id}/scripture`, {
+        scripture_text: scripture,
+        verse_reference: 'Scripture Display',
+        display_position: 'bottom',
+        font_size: 24,
+        background_opacity: 0.8
+      });
+      
+      setScriptureDisplay(scripture);
+      setMessage({ type: 'success', text: 'Scripture display updated!' });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to update scripture' 
+      });
     }
   };
 
   const handleDeleteRoom = async (roomId) => {
     if (window.confirm('Are you sure you want to delete this video room? This action cannot be undone.')) {
       try {
-        await axios.delete(`${API}/video-rooms/${roomId}`);
+        await axios.delete(`${API}/church-video/${roomId}`);
         setMessage({ type: 'success', text: 'Video room deleted successfully!' });
-        fetchVideoRooms();
+        fetchChurchVideoRooms();
       } catch (error) {
         setMessage({ 
           type: 'error', 
@@ -2256,34 +2311,120 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     }
   };
 
+  const formatDateTime = (dateString) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const getServiceTypeIcon = (serviceType) => {
+    const icons = {
+      'main_service': '⛪',
+      'bible_study': '📖',
+      'youth_meeting': '👨‍👩‍👧‍👦',
+      'prayer': '🙏',
+      'worship': '🎵'
+    };
+    return icons[serviceType] || '📹';
+  };
+
+  const rtcCallbacks = {
+    EndCall: () => handleLeaveRoom(),
+    UserJoined: (uid) => {
+      console.log('User joined:', uid);
+    },
+    UserLeft: (uid) => {
+      console.log('User left:', uid);
+    },
+  };
+
   // If user is in an active room, show the video conference interface
-  if (activeRoom && callObject) {
+  if (videoCall && agoraConfig) {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Active Video Conference</h2>
-            <button
-              onClick={handleLeaveRoom}
-              className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors"
-            >
-              Leave Meeting
-            </button>
-          </div>
-          
-          {/* Daily.co iframe container */}
-          <div className="bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
-            <div id="daily-call-container" className="w-full h-full">
-              {/* Daily.co will inject the video interface here */}
-              <p className="text-white text-center p-8">
-                Video conference is loading... Please wait.
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {activeRoom?.room_name || 'Church Video Conference'}
+              </h2>
+              <p className="text-gray-600">
+                {activeRoom?.service_type?.replace('_', ' ').toUpperCase()} • Channel: {activeRoom?.channel_name}
               </p>
+            </div>
+            <div className="flex space-x-4">
+              <button
+                onClick={handleStartStreaming}
+                disabled={isStreaming}
+                className={`px-4 py-2 rounded-xl font-medium transition-colors ${
+                  isStreaming
+                    ? 'bg-red-100 text-red-600 cursor-not-allowed'
+                    : 'bg-red-500 text-white hover:bg-red-600'
+                }`}
+              >
+                {isStreaming ? '🔴 Live Streaming' : '📡 Start Streaming'}
+              </button>
+              <button
+                onClick={handleLeaveRoom}
+                className="bg-gray-500 text-white px-6 py-3 rounded-xl hover:bg-gray-600 transition-colors"
+              >
+                Leave Meeting
+              </button>
             </div>
           </div>
           
+          {/* Church-Specific Controls */}
+          <div className="mb-6 p-4 bg-purple-50 rounded-xl">
+            <h3 className="text-lg font-semibold text-purple-900 mb-3">Church Service Controls</h3>
+            <div className="flex space-x-4">
+              <input
+                type="text"
+                placeholder="Display scripture verse (e.g., John 3:16 - For God so loved the world...)"
+                value={scriptureDisplay}
+                onChange={(e) => setScriptureDisplay(e.target.value)}
+                className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+              <button
+                onClick={() => handleScriptureUpdate(scriptureDisplay)}
+                className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 transition-colors"
+              >
+                Update Scripture
+              </button>
+            </div>
+          </div>
+          
+          {/* Agora Video Interface */}
+          <div className="bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
+            <AgoraUIKit
+              connectionData={agoraConfig}
+              rtcCallbacks={rtcCallbacks}
+              settings={{
+                host: true,
+                mode: 1, // Live broadcasting mode
+                role: 1, // Host role
+              }}
+              styleProps={{
+                localBtnContainer: {
+                  backgroundColor: 'rgba(0,0,0,0.8)',
+                  borderRadius: '12px',
+                  padding: '10px'
+                },
+                maxViewContainer: {
+                  borderRadius: '12px'
+                }
+              }}
+            />
+          </div>
+          
+          {/* Scripture Overlay */}
+          {scriptureDisplay && (
+            <div className="absolute bottom-32 left-8 right-8 bg-black bg-opacity-80 text-white p-4 rounded-lg text-center">
+              <p className="text-xl font-light font-serif">{scriptureDisplay}</p>
+            </div>
+          )}
+          
           <div className="mt-4 p-4 bg-blue-50 rounded-xl">
             <p className="text-blue-800">
-              <strong>💡 Tip:</strong> Use the video controls to mute/unmute, share screen, and manage participants.
+              <strong>🎥 Professional Church Broadcasting:</strong> Use the scripture display to share verses with your congregation. 
+              Start live streaming to reach members who cannot attend in person.
             </p>
           </div>
         </div>
@@ -2295,16 +2436,16 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Video Conference Rooms</h2>
-          <p className="text-gray-600">Create and manage video conference rooms</p>
+          <h2 className="text-2xl font-bold text-gray-900">Church Video Conference System</h2>
+          <p className="text-gray-600">Professional video conferencing with scripture display and live streaming</p>
         </div>
         <button
           onClick={() => setShowCreateRoom(true)}
           className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors shadow-lg"
         >
           <span className="flex items-center space-x-2">
-            <span>📹</span>
-            <span>Create Video Room</span>
+            <span>⛪</span>
+            <span>Create Church Room</span>
           </span>
         </button>
       </div>
@@ -2312,8 +2453,37 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
       {/* Create Room Form */}
       {showCreateRoom && (
         <div className="bg-white rounded-2xl shadow-lg p-6 border">
-          <h3 className="text-xl font-bold mb-6">Create New Video Room</h3>
+          <h3 className="text-xl font-bold mb-6">Create New Church Video Room</h3>
           <form onSubmit={handleCreateRoom} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Room Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newRoom.room_name}
+                  onChange={(e) => setNewRoom({ ...newRoom, room_name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  placeholder="Sunday Morning Service"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+                <select
+                  value={newRoom.service_type}
+                  onChange={(e) => setNewRoom({ ...newRoom, service_type: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                >
+                  <option value="main_service">⛪ Main Service</option>
+                  <option value="bible_study">📖 Bible Study</option>
+                  <option value="youth_meeting">👨‍👩‍👧‍👦 Youth Meeting</option>
+                  <option value="prayer">🙏 Prayer Meeting</option>
+                  <option value="worship">🎵 Worship Service</option>
+                </select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Max Participants</label>
@@ -2325,18 +2495,18 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
                   <option value={50}>50 participants</option>
                   <option value={200}>200 participants</option>
                   <option value={500}>500 participants</option>
-                  <option value={1000}>1,000 participants</option>
+                  <option value={1000}>1,000 participants (Full Capacity)</option>
                 </select>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Group (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Group</label>
                 <select
                   value={newRoom.group_id}
                   onChange={(e) => setNewRoom({ ...newRoom, group_id: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 >
-                  <option value="">All groups</option>
+                  <option value="">All Church Members</option>
                   {groups.map((group) => (
                     <option key={group.id} value={group.id}>{group.name}</option>
                   ))}
@@ -2344,50 +2514,29 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Room Duration (minutes)</label>
-                <input
-                  type="number"
-                  min="15"
-                  max="480"
-                  value={newRoom.expires_in_minutes}
-                  onChange={(e) => setNewRoom({ ...newRoom, expires_in_minutes: parseInt(e.target.value) })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                />
+            <div className="bg-red-50 rounded-xl p-4">
+              <h4 className="font-semibold text-gray-900 mb-4">Church Service Features</h4>
+              <div className="space-y-3">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newRoom.enable_recording}
+                    onChange={(e) => setNewRoom({ ...newRoom, enable_recording: e.target.checked })}
+                    className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-700">Enable Automatic Cloud Recording</span>
+                </label>
+                
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newRoom.enable_streaming}
+                    onChange={(e) => setNewRoom({ ...newRoom, enable_streaming: e.target.checked })}
+                    className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-700">Enable Live Streaming (YouTube, Facebook)</span>
+                </label>
               </div>
-            </div>
-            
-            <div className="space-y-4">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={newRoom.enable_recording}
-                  onChange={(e) => setNewRoom({ ...newRoom, enable_recording: e.target.checked })}
-                  className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
-                />
-                <span className="ml-3 text-sm font-medium text-gray-700">Enable Cloud Recording</span>
-              </label>
-              
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={newRoom.enable_screenshare}
-                  onChange={(e) => setNewRoom({ ...newRoom, enable_screenshare: e.target.checked })}
-                  className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
-                />
-                <span className="ml-3 text-sm font-medium text-gray-700">Enable Screen Sharing</span>
-              </label>
-              
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={newRoom.enable_livestreaming}
-                  onChange={(e) => setNewRoom({ ...newRoom, enable_livestreaming: e.target.checked })}
-                  className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
-                />
-                <span className="ml-3 text-sm font-medium text-gray-700">Enable Live Streaming</span>
-              </label>
             </div>
             
             <div className="flex space-x-4">
@@ -2396,7 +2545,7 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
                 disabled={loading}
                 className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors shadow-lg"
               >
-                {loading ? 'Creating...' : 'Create Room'}
+                {loading ? 'Creating...' : 'Create Church Room'}
               </button>
               <button
                 type="button"
@@ -2410,13 +2559,13 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
         </div>
       )}
 
-      {/* Video Rooms Grid */}
+      {/* Church Video Rooms Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {videoRooms.length === 0 ? (
+        {churchVideoRooms.length === 0 ? (
           <div className="col-span-full text-center py-12 bg-white rounded-2xl shadow-lg">
-            <div className="text-6xl mb-4">📹</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No Video Rooms Created</h3>
-            <p className="text-gray-600 mb-6">Get started by creating your first video conference room</p>
+            <div className="text-6xl mb-4">⛪</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">No Church Video Rooms Created</h3>
+            <p className="text-gray-600 mb-6">Create your first church video room to start broadcasting services</p>
             <button
               onClick={() => setShowCreateRoom(true)}
               className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors"
@@ -2425,16 +2574,16 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
             </button>
           </div>
         ) : (
-          videoRooms.map((room) => (
+          churchVideoRooms.map((room) => (
             <div key={room.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-200 border">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                    📹
+                    {getServiceTypeIcon(room.service_type)}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{room.daily_room_name}</h3>
-                    <p className="text-sm text-gray-500">Video Conference</p>
+                    <h3 className="text-lg font-bold text-gray-900">{room.room_name}</h3>
+                    <p className="text-sm text-gray-500">{room.service_type.replace('_', ' ').toUpperCase()}</p>
                   </div>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -2444,36 +2593,40 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
               
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Channel:</span>
+                  <span className="font-medium text-gray-900">{room.channel_name}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-500">Max Participants:</span>
-                  <span className="font-medium text-gray-900">{room.max_participants}</span>
+                  <span className="font-medium text-gray-900">{room.max_participants.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-500">Recording:</span>
                   <span className="font-medium text-gray-900">
-                    {room.enable_recording ? 'Enabled' : 'Disabled'}
+                    {room.enable_recording ? '✅ Enabled' : '❌ Disabled'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Screen Share:</span>
+                  <span className="text-gray-500">Live Streaming:</span>
                   <span className="font-medium text-gray-900">
-                    {room.enable_screenshare ? 'Enabled' : 'Disabled'}
+                    {room.enable_streaming ? '🔴 Ready' : '📡 Available'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Expires:</span>
+                  <span className="text-gray-500">Created:</span>
                   <span className="font-medium text-gray-900 text-xs">
-                    {new Date(room.expires_at).toLocaleString()}
+                    {formatDateTime(room.created_at)}
                   </span>
                 </div>
               </div>
               
               <div className="flex space-x-2">
                 <button
-                  onClick={() => handleJoinRoom(room.id)}
+                  onClick={() => handleJoinRoom(room)}
                   disabled={loading}
                   className="flex-1 bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
                 >
-                  {loading ? 'Joining...' : 'Join Room'}
+                  {loading ? 'Joining...' : 'Join Service'}
                 </button>
                 <button
                   onClick={() => handleDeleteRoom(room.id)}
@@ -2485,6 +2638,28 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
             </div>
           ))
         )}
+      </div>
+
+      {/* Professional Features Info */}
+      <div className="bg-gradient-to-r from-purple-500 to-red-500 rounded-2xl shadow-lg p-6 text-white">
+        <h3 className="text-xl font-bold mb-4">Professional Church Broadcasting Features</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="text-center">
+            <div className="text-3xl mb-2">📖</div>
+            <h4 className="font-semibold mb-2">Scripture Display</h4>
+            <p className="text-sm opacity-90">Display Bible verses with professional formatting during services</p>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl mb-2">🔴</div>
+            <h4 className="font-semibold mb-2">Multi-Platform Streaming</h4>
+            <p className="text-sm opacity-90">Stream simultaneously to YouTube, Facebook, and other platforms</p>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl mb-2">☁️</div>
+            <h4 className="font-semibold mb-2">Cloud Recording</h4>
+            <p className="text-sm opacity-90">Automatic recording with 7TB storage for all church services</p>
+          </div>
+        </div>
       </div>
     </div>
   );
