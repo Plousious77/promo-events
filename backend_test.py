@@ -1219,9 +1219,8 @@ class ChurchYouthAppTester:
         success, response = self.run_test(
             "Test Agora Environment Setup",
             "POST",
-            "agora/jwt/generate",
+            "agora/jwt/generate?user_role=super_admin",
             200,
-            data={"user_role": "super_admin"},
             token=self.admin_token
         )
         
