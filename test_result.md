@@ -224,10 +224,11 @@ Previous context: Implement Phase 2: Video Conferencing System with WebRTC-based
   run_ui: false
 
 ## test_plan:
-  current_focus: []
+  current_focus:
+    - "Fix Agora token generation import error"
   stuck_tasks: []
   test_all: false
-  test_priority: "high_first"
+  test_priority: "critical_first"
 
 ## agent_communication:
     - agent: "main"
