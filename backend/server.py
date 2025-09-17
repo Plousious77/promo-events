@@ -1507,185 +1507,342 @@ class PunchOutRequest(BaseModel):
     completion_notes: Optional[str] = None
     task_rating: Optional[int] = Field(None, ge=1, le=5)
 
-# Daily.co Video Conferencing Integration
-DAILY_API_KEY = os.environ.get("DAILY_API_KEY", "your-daily-api-key-here")
-DAILY_DOMAIN = os.environ.get("DAILY_DOMAIN", "your-domain.daily.co")
+# Agora Video Conferencing Integration - Complete Church System
+AGORA_APP_ID = os.environ.get("AGORA_APP_ID", "default-application_10499703")
+AGORA_APP_CERTIFICATE = os.environ.get("AGORA_APP_CERTIFICATE", "")
+AGORA_CUSTOMER_ID = os.environ.get("AGORA_CUSTOMER_ID", "")
+AGORA_CUSTOMER_SECRET = os.environ.get("AGORA_CUSTOMER_SECRET", "")
+AGORA_API_KEY = os.environ.get("X_RAPIDAPI_KEY", "bfcbd2b614msh7b418fee1bffb9dp177734jsn6fde4726726a")
 
-# Video Conference Models
-class VideoRoomCreate(BaseModel):
-    name: Optional[str] = None
-    max_participants: int = 200
-    enable_recording: bool = False
-    enable_screenshare: bool = True
-    enable_livestreaming: bool = False
-    group_id: Optional[str] = None
-    meeting_id: Optional[str] = None
-    expires_in_minutes: int = 60
+# Church Video Conference Models
+class AgoraTokenRequest(BaseModel):
+    channel_name: str
+    uid: int
+    role: str  # 'host', 'participant'
+    expire_time: int = 3600
 
-class VideoRoom(BaseModel):
+class ChurchVideoRoom(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    daily_room_name: str
-    daily_room_url: str
+    channel_name: str
+    room_name: str
     creator_id: str
     group_id: Optional[str] = None
     meeting_id: Optional[str] = None
-    max_participants: int
-    enable_recording: bool = False
-    enable_screenshare: bool = True
-    enable_livestreaming: bool = False
+    service_type: str = "main_service"  # main_service, bible_study, youth_meeting, prayer
+    max_participants: int = 1000
+    enable_recording: bool = True
+    enable_streaming: bool = False
+    streaming_platforms: List[str] = []
+    scripture_display: Optional[str] = None
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime
-    recording_id: Optional[str] = None
-    livestream_id: Optional[str] = None
+    recording_resource_id: Optional[str] = None
+    recording_sid: Optional[str] = None
+    streaming_sessions: Dict[str, str] = {}
 
-class JoinTokenRequest(BaseModel):
-    room_id: str
-    permissions: Optional[Dict[str, Any]] = {}
+class ScriptureDisplayUpdate(BaseModel):
+    scripture_text: str
+    verse_reference: str
+    display_position: str = "bottom"  # top, bottom, left, right, center
+    display_duration: int = 0  # 0 = permanent, >0 = seconds
+    font_size: int = 24
+    background_opacity: float = 0.8
 
-# Daily.co API Client
-class DailyAPIClient:
-    def __init__(self, api_key: str, domain: str):
-        self.api_key = api_key
-        self.domain = domain
-        self.base_url = "https://api.daily.co/v1"
-        self.headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-    
-    async def create_room(self, room_config: dict):
-        """Create a new Daily.co room"""
-        import httpx
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    f"{self.base_url}/rooms",
-                    json=room_config,
-                    headers=self.headers,
-                    timeout=30.0
-                )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logging.error(f"Daily.co API error: {str(e)}")
-                raise HTTPException(
-                    status_code=getattr(e.response, 'status_code', 500),
-                    detail=f"Failed to create Daily room: {str(e)}"
-                )
-    
-    async def delete_room(self, room_name: str):
-        """Delete a Daily.co room"""
-        import httpx
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.delete(
-                    f"{self.base_url}/rooms/{room_name}",
-                    headers=self.headers,
-                    timeout=30.0
-                )
-                return response.status_code in [200, 204, 404]
-            except httpx.HTTPError as e:
-                logging.error(f"Failed to delete Daily room: {str(e)}")
-                return False
-    
-    async def create_meeting_token(self, room_name: str, user_config: dict):
-        """Create a meeting token for room access"""
-        import httpx
-        token_config = {
-            "properties": {
-                "room_name": room_name,
-                "user_name": user_config.get("username"),
-                "is_owner": user_config.get("is_owner", False),
-                "enable_screenshare": user_config.get("enable_screenshare", True),
-                "enable_recording": user_config.get("enable_recording", False),
-                "start_video_off": user_config.get("start_video_off", False),
-                "start_audio_off": user_config.get("start_audio_off", False),
-                "exp": int((datetime.now(timezone.utc) + timedelta(hours=2)).timestamp())
-            }
-        }
+class StreamingPlatformConfig(BaseModel):
+    platform: str  # youtube, facebook, twitch
+    stream_key: str
+    rtmp_url: str
+    title: str
+    description: Optional[str] = ""
+
+# Agora API Client for Church Services
+class ChurchAgoraClient:
+    def __init__(self):
+        self.app_id = AGORA_APP_ID
+        self.app_certificate = AGORA_APP_CERTIFICATE
+        self.customer_id = AGORA_CUSTOMER_ID
+        self.customer_secret = AGORA_CUSTOMER_SECRET
+        self.base_url = "https://api.agora.io/v1"
         
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    f"{self.base_url}/meeting-tokens",
-                    json=token_config,
-                    headers=self.headers,
+    def generate_rtc_token(self, channel_name: str, uid: int, role: str, expire_time: int = 3600) -> str:
+        """Generate Agora RTC token for video access"""
+        try:
+            from agora_token_builder import RtcTokenBuilder, Role_Publisher, Role_Subscriber
+            
+            # Determine role privilege
+            privilege = Role_Publisher if role == 'host' else Role_Subscriber
+            
+            # Calculate expiration timestamp
+            expiration_timestamp = int(datetime.now().timestamp()) + expire_time
+            
+            # Generate token
+            token = RtcTokenBuilder.buildTokenWithUid(
+                self.app_id,
+                self.app_certificate,
+                channel_name,
+                uid,
+                privilege,
+                expiration_timestamp
+            )
+            
+            return token
+        except Exception as e:
+            logging.error(f"Agora token generation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
+    
+    def get_auth_header(self) -> str:
+        """Generate basic auth header for Agora API"""
+        import base64
+        credential = f"{self.customer_id}:{self.customer_secret}"
+        encoded_credential = base64.b64encode(credential.encode()).decode()
+        return f"Basic {encoded_credential}"
+    
+    async def start_cloud_recording(self, channel_name: str, uid: int, recording_config: dict):
+        """Start Agora cloud recording"""
+        try:
+            # Step 1: Acquire resource
+            acquire_payload = {
+                "cname": channel_name,
+                "uid": str(uid),
+                "clientRequest": {
+                    "resourceExpiredHour": 24,
+                    "scene": 0  # RTC channel
+                }
+            }
+            
+            async with httpx.AsyncClient() as client:
+                acquire_response = await client.post(
+                    f"{self.base_url}/apps/{self.app_id}/cloud_recording/acquire",
+                    headers={
+                        "Authorization": self.get_auth_header(),
+                        "Content-Type": "application/json"
+                    },
+                    json=acquire_payload,
                     timeout=30.0
                 )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logging.error(f"Failed to create meeting token: {str(e)}")
-                raise HTTPException(
-                    status_code=getattr(e.response, 'status_code', 500),
-                    detail=f"Failed to create meeting token: {str(e)}"
+                
+                if acquire_response.status_code != 200:
+                    raise HTTPException(status_code=500, detail="Failed to acquire recording resource")
+                
+                resource_id = acquire_response.json()["resourceId"]
+                
+                # Step 2: Start recording
+                recording_token = self.generate_rtc_token(channel_name, uid, 'host', 7200)
+                
+                start_payload = {
+                    "cname": channel_name,
+                    "uid": str(uid),
+                    "clientRequest": {
+                        "token": recording_token,
+                        "storageConfig": {
+                            "vendor": 1,  # AWS S3
+                            "region": 1,  # US_EAST_1
+                            "bucket": os.environ.get("AWS_BUCKET_NAME", "church-recordings"),
+                            "accessKey": os.environ.get("AWS_ACCESS_KEY_ID"),
+                            "secretKey": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                            "fileNamePrefix": [
+                                "church-recordings",
+                                channel_name,
+                                str(int(datetime.now().timestamp()))
+                            ]
+                        },
+                        "recordingConfig": recording_config,
+                        "recordingFileConfig": {
+                            "avFileType": ["hls", "mp4"]
+                        }
+                    }
+                }
+                
+                start_response = await client.post(
+                    f"{self.base_url}/apps/{self.app_id}/cloud_recording/resourceid/{resource_id}/mode/composite/start",
+                    headers={
+                        "Authorization": self.get_auth_header(),
+                        "Content-Type": "application/json"
+                    },
+                    json=start_payload,
+                    timeout=30.0
                 )
+                
+                if start_response.status_code == 200:
+                    recording_data = start_response.json()
+                    return {
+                        "resource_id": resource_id,
+                        "sid": recording_data["sid"]
+                    }
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to start recording")
+                    
+        except Exception as e:
+            logging.error(f"Cloud recording failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Recording failed: {str(e)}")
+    
+    async def start_rtmp_streaming(self, channel_name: str, uid: int, streaming_configs: List[dict]):
+        """Start RTMP streaming to multiple platforms"""
+        try:
+            streaming_sessions = {}
+            
+            for config in streaming_configs:
+                platform = config["platform"]
+                rtmp_url = f"{config['rtmp_url']}{config['stream_key']}"
+                
+                streaming_payload = {
+                    "cname": channel_name,
+                    "uid": str(uid),
+                    "clientRequest": {
+                        "publishUrl": rtmp_url,
+                        "rawStreamUrl": rtmp_url,
+                        "transcodingConfig": {
+                            "width": 1920,
+                            "height": 1080,
+                            "videoBitrate": 4000,
+                            "videoFramerate": 30,
+                            "audioSampleRate": 48000,
+                            "audioBitrate": 128,
+                            "audioChannels": 2,
+                            "backgroundColor": "#000000",
+                            "layoutConfig": [
+                                {
+                                    "uid": "1",  # Main speaker
+                                    "x_axis": 0.0,
+                                    "y_axis": 0.0,
+                                    "width": 1.0,
+                                    "height": 0.8,
+                                    "alpha": 1.0,
+                                    "render_mode": 1
+                                }
+                            ]
+                        }
+                    }
+                }
+                
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.base_url}/apps/{self.app_id}/rtmp/streamers",
+                        headers={
+                            "Authorization": self.get_auth_header(),
+                            "Content-Type": "application/json"
+                        },
+                        json=streaming_payload,
+                        timeout=30.0
+                    )
+                    
+                    if response.status_code == 200:
+                        stream_data = response.json()
+                        streaming_sessions[platform] = stream_data["streamId"]
+            
+            return streaming_sessions
+            
+        except Exception as e:
+            logging.error(f"RTMP streaming failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Streaming failed: {str(e)}")
 
-daily_client = DailyAPIClient(DAILY_API_KEY, DAILY_DOMAIN)
+# Initialize Agora client
+agora_client = ChurchAgoraClient()
 
-# Video Conference Routes
-@api_router.post("/video-rooms/", response_model=VideoRoom)
-async def create_video_room(
-    room_data: VideoRoomCreate,
+# Church Video Conference Routes
+@api_router.post("/agora/token", response_model=dict)
+async def generate_agora_token(
+    request: AgoraTokenRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Create a new video conference room"""
+    """Generate Agora RTC token for church video conference"""
     try:
-        # Generate unique room name
-        room_name = f"room-{uuid.uuid4().hex[:12]}"
+        # Validate user permissions for the requested role
+        if request.role == 'host' and current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions for host role")
         
-        # Configure Daily.co room properties
-        daily_room_config = {
-            "name": room_name,
-            "properties": {
-                "max_participants": min(room_data.max_participants, 1000),  # Enforce limit
-                "enable_screenshare": room_data.enable_screenshare,
-                "enable_recording": "cloud" if room_data.enable_recording else "off",  
-                "enable_livestreaming": room_data.enable_livestreaming,
-                "enable_mesh_sfu": room_data.max_participants > 50,  # Use SFU for large calls
-                "exp": int((datetime.now(timezone.utc) + timedelta(minutes=room_data.expires_in_minutes)).timestamp())
-            }
-        }
-        
-        # Create room in Daily.co
-        daily_room = await daily_client.create_room(daily_room_config)
-        
-        # Store room in database
-        video_room = VideoRoom(
-            daily_room_name=daily_room["name"],
-            daily_room_url=daily_room["url"],
-            creator_id=current_user.id,
-            group_id=room_data.group_id or current_user.group_id,
-            meeting_id=room_data.meeting_id,
-            max_participants=room_data.max_participants,
-            enable_recording=room_data.enable_recording,
-            enable_screenshare=room_data.enable_screenshare,
-            enable_livestreaming=room_data.enable_livestreaming,
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=room_data.expires_in_minutes)
+        # Generate token
+        token = agora_client.generate_rtc_token(
+            channel_name=request.channel_name,
+            uid=request.uid,
+            role=request.role,
+            expire_time=request.expire_time
         )
         
-        # Save to database
-        room_dict_for_db = prepare_for_mongo(video_room.dict())
-        await db.video_rooms.insert_one(room_dict_for_db)
+        return {
+            "token": token,
+            "app_id": AGORA_APP_ID,
+            "channel": request.channel_name,
+            "uid": request.uid,
+            "expires_at": datetime.now() + timedelta(seconds=request.expire_time)
+        }
         
-        # Update meeting with video room if meeting_id provided
-        if room_data.meeting_id:
-            await db.meetings.update_one(
-                {"id": room_data.meeting_id},
-                {"$set": {"virtual_link": daily_room["url"]}}
-            )
+    except Exception as e:
+        logging.error(f"Token generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/church-video/create", response_model=ChurchVideoRoom)
+async def create_church_video_room(
+    room_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new church video conference room"""
+    try:
+        # Generate unique channel name
+        channel_name = f"church-{uuid.uuid4().hex[:12]}"
+        
+        # Create video room
+        video_room = ChurchVideoRoom(
+            channel_name=channel_name,
+            room_name=room_data.get("room_name", "Church Service"),
+            creator_id=current_user.id,
+            group_id=room_data.get("group_id"),
+            service_type=room_data.get("service_type", "main_service"),
+            max_participants=min(room_data.get("max_participants", 1000), 1000),
+            enable_recording=room_data.get("enable_recording", True),
+            enable_streaming=room_data.get("enable_streaming", False),
+            streaming_platforms=room_data.get("streaming_platforms", []),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=4)  # 4 hour default
+        )
+        
+        # Store room in database
+        room_dict_for_db = prepare_for_mongo(video_room.dict())
+        await db.church_video_rooms.insert_one(room_dict_for_db)
+        
+        # Auto-start recording if enabled
+        if video_room.enable_recording:
+            try:
+                recording_config = {
+                    "channelType": 1,  # Live broadcast
+                    "maxIdleTime": 300,
+                    "transcodingConfig": {
+                        "width": 1920,
+                        "height": 1080,
+                        "fps": 30,
+                        "bitrate": 4000,
+                        "backgroundColor": "#000000"
+                    }
+                }
+                
+                recording_result = await agora_client.start_cloud_recording(
+                    channel_name, current_user.id, recording_config
+                )
+                
+                # Update room with recording info
+                await db.church_video_rooms.update_one(
+                    {"id": video_room.id},
+                    {
+                        "$set": {
+                            "recording_resource_id": recording_result["resource_id"],
+                            "recording_sid": recording_result["sid"]
+                        }
+                    }
+                )
+                
+            except Exception as e:
+                logging.warning(f"Auto-recording failed: {str(e)}")
         
         # Log the activity
         activity = SystemActivity(
             user_id=current_user.id,
-            action="create_video_room",
-            target_type="video_room",
+            action="create_church_video_room",
+            target_type="church_video_room",
             target_id=video_room.id,
             details={
-                "room_name": daily_room["name"],
-                "max_participants": room_data.max_participants,
-                "group_id": room_data.group_id
+                "channel_name": channel_name,
+                "service_type": video_room.service_type,
+                "max_participants": video_room.max_participants
             }
         )
         await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
@@ -1693,136 +1850,161 @@ async def create_video_room(
         return video_room
         
     except Exception as e:
-        logging.error(f"Failed to create video room: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create video conference room"
-        )
+        logging.error(f"Failed to create church video room: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create video room")
 
-@api_router.get("/video-rooms/", response_model=List[VideoRoom])
-async def get_video_rooms(
+@api_router.get("/church-video/rooms", response_model=List[ChurchVideoRoom])
+async def get_church_video_rooms(
+    service_type: Optional[str] = None,
     group_id: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get video conference rooms"""
+    """Get church video conference rooms"""
     try:
         query = {"is_active": True}
         
-        # Filter by group if specified and user has access
+        if service_type:
+            query["service_type"] = service_type
+            
         if group_id:
             query["group_id"] = group_id
         elif current_user.group_id and current_user.role != UserRole.SUPER_ADMIN:
             query["group_id"] = current_user.group_id
         
-        rooms = await db.video_rooms.find(query).sort("created_at", -1).to_list(100)
-        return [VideoRoom(**parse_from_mongo(room)) for room in rooms]
+        rooms = await db.church_video_rooms.find(query).sort("created_at", -1).to_list(50)
+        return [ChurchVideoRoom(**parse_from_mongo(room)) for room in rooms]
         
     except Exception as e:
-        logging.error(f"Failed to fetch video rooms: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch video rooms"
-        )
+        logging.error(f"Failed to fetch church video rooms: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch video rooms")
 
-@api_router.post("/video-rooms/{room_id}/join-token")
-async def get_video_room_join_token(
+@api_router.post("/church-video/{room_id}/scripture")
+async def update_scripture_display(
     room_id: str,
+    scripture_update: ScriptureDisplayUpdate,
     current_user: User = Depends(get_current_user)
 ):
-    """Get a join token for a video conference room"""
+    """Update scripture display during church service"""
     try:
-        # Get room from database
-        room = await db.video_rooms.find_one({"id": room_id, "is_active": True})
+        # Get room
+        room = await db.church_video_rooms.find_one({"id": room_id, "is_active": True})
         if not room:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Video room not found"
-            )
+            raise HTTPException(status_code=404, detail="Church video room not found")
         
-        # Check permissions (group membership, etc.)
-        if room.get("group_id") and room["group_id"] != current_user.group_id and current_user.role != UserRole.SUPER_ADMIN:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied to this video room"
-            )
+        # Check permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Only church leaders can update scripture display")
         
-        # Check if room has expired
-        expires_at = datetime.fromisoformat(room["expires_at"].replace('Z', '+00:00'))
-        if datetime.now(timezone.utc) > expires_at:
-            raise HTTPException(
-                status_code=status.HTTP_410_GONE,
-                detail="Video room has expired"
-            )
+        # Update scripture display
+        scripture_text = f"{scripture_update.verse_reference} - {scripture_update.scripture_text}"
         
-        # Determine user permissions
-        is_owner = (room["creator_id"] == current_user.id) or (current_user.role in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN])
-        
-        user_config = {
-            "username": current_user.full_name,
-            "is_owner": is_owner,
-            "enable_screenshare": room.get("enable_screenshare", True),
-            "enable_recording": room.get("enable_recording", False) and is_owner,
-            "start_video_off": False,
-            "start_audio_off": False
-        }
-        
-        # Create meeting token
-        token_response = await daily_client.create_meeting_token(
-            room["daily_room_name"],
-            user_config
+        await db.church_video_rooms.update_one(
+            {"id": room_id},
+            {
+                "$set": {
+                    "scripture_display": scripture_text,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            }
         )
         
+        # Broadcast scripture update to all participants (would be implemented with RTM)
+        # For now, return the update for frontend to handle
+        
         return {
-            "token": token_response["token"],
-            "room_url": room["daily_room_url"],
-            "room_name": room["daily_room_name"],
-            "expires": token_response.get("expires_at"),
-            "permissions": user_config,
-            "room_config": {
-                "max_participants": room["max_participants"],
-                "enable_recording": room["enable_recording"],
-                "enable_screenshare": room["enable_screenshare"],
-                "enable_livestreaming": room.get("enable_livestreaming", False)
-            }
+            "message": "Scripture display updated",
+            "scripture": scripture_text,
+            "display_config": scripture_update.dict()
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Failed to create join token: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate meeting access token"
-        )
+        logging.error(f"Failed to update scripture display: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update scripture display")
 
-@api_router.delete("/video-rooms/{room_id}")
-async def delete_video_room(
+@api_router.post("/church-video/{room_id}/streaming/start")
+async def start_church_streaming(
+    room_id: str,
+    streaming_platforms: List[StreamingPlatformConfig],
+    current_user: User = Depends(get_current_user)
+):
+    """Start live streaming to multiple platforms"""
+    try:
+        # Get room
+        room = await db.church_video_rooms.find_one({"id": room_id, "is_active": True})
+        if not room:
+            raise HTTPException(status_code=404, detail="Church video room not found")
+        
+        # Check permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Only church leaders can start streaming")
+        
+        # Prepare streaming configurations
+        streaming_configs = []
+        for platform_config in streaming_platforms:
+            streaming_configs.append({
+                "platform": platform_config.platform,
+                "rtmp_url": platform_config.rtmp_url,
+                "stream_key": platform_config.stream_key
+            })
+        
+        # Start streaming
+        streaming_sessions = await agora_client.start_rtmp_streaming(
+            room["channel_name"], current_user.id, streaming_configs
+        )
+        
+        # Update room with streaming info
+        await db.church_video_rooms.update_one(
+            {"id": room_id},
+            {
+                "$set": {
+                    "enable_streaming": True,
+                    "streaming_sessions": streaming_sessions,
+                    "streaming_platforms": [config.platform for config in streaming_platforms],
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        return {
+            "message": "Live streaming started successfully",
+            "platforms": [config.platform for config in streaming_platforms],
+            "streaming_sessions": streaming_sessions
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to start streaming: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start streaming")
+
+@api_router.delete("/church-video/{room_id}")
+async def delete_church_video_room(
     room_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a video conference room"""
+    """Delete a church video conference room"""
     try:
-        # Get room from database
-        room = await db.video_rooms.find_one({"id": room_id, "is_active": True})
+        # Get room
+        room = await db.church_video_rooms.find_one({"id": room_id, "is_active": True})
         if not room:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Video room not found"
-            )
+            raise HTTPException(status_code=404, detail="Church video room not found")
         
         # Check permissions
-        is_owner = (room["creator_id"] == current_user.id) or (current_user.role == UserRole.SUPER_ADMIN)
-        if not is_owner:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this room"
-            )
+        if room["creator_id"] != current_user.id and current_user.role != UserRole.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this room")
         
-        # Delete room from Daily.co
-        await daily_client.delete_room(room["daily_room_name"])
+        # Stop any active recording
+        if room.get("recording_resource_id") and room.get("recording_sid"):
+            try:
+                # Stop recording logic would go here
+                pass
+            except Exception as e:
+                logging.warning(f"Failed to stop recording: {str(e)}")
         
-        # Soft delete from database
-        await db.video_rooms.update_one(
+        # Soft delete room
+        await db.church_video_rooms.update_one(
             {"id": room_id},
             {
                 "$set": {
@@ -1832,26 +2014,15 @@ async def delete_video_room(
             }
         )
         
-        # Log the activity
-        activity = SystemActivity(
-            user_id=current_user.id,
-            action="delete_video_room",
-            target_type="video_room",
-            target_id=room_id,
-            details={"room_name": room["daily_room_name"]}
-        )
-        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
-        
-        return {"message": "Video room deleted successfully"}
+        return {"message": "Church video room deleted successfully"}
         
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Failed to delete video room: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete video room"
-        )
+        logging.error(f"Failed to delete church video room: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete video room")
+
+# Task Management Routes - Phase 2 Time Tracking System
 
 # Include the router in the main app
 app.include_router(api_router)
