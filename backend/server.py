@@ -208,6 +208,7 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     role: str
     status: str
+    group_id: Optional[str] = None
     profile_picture: Optional[str] = None
     bio: Optional[str] = None
     time_zone: str
