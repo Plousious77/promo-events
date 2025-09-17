@@ -2864,33 +2864,153 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     }
   };
 
-  const handleCreateRoom = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  // Render method
+  if (!videoCall || !channelData) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              🎥 Church Video Conferences
+            </h1>
+            <p className="text-gray-600">
+              Create and manage video conference meetings for your church groups
+            </p>
+          </div>
 
-    try {
-      const response = await axios.post(`${API}/church-video/create`, newRoom);
-      setMessage({ type: 'success', text: 'Church video room created successfully!' });
-      setNewRoom({
-        room_name: '',
-        service_type: 'main_service',
-        max_participants: 1000,
-        enable_recording: true,
-        enable_streaming: false,
-        streaming_platforms: [],
-        group_id: ''
-      });
-      setShowCreateRoom(false);
-      fetchChurchVideoRooms();
-    } catch (error) {
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.detail || 'Failed to create video room' 
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+          {/* Create Channel Button */}
+          {user.role !== 'member' && (
+            <div className="mb-6">
+              <button
+                onClick={() => setShowCreateChannel(true)}
+                className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold"
+              >
+                Create New Meeting Channel
+              </button>
+            </div>
+          )}
+
+          {/* Create Channel Form */}
+          {showCreateChannel && (
+            <div className="mb-8 bg-white rounded-2xl shadow-lg p-6">
+              <h3 className="text-xl font-bold mb-6">Create New Church Meeting Channel</h3>
+              <form onSubmit={createMeetingChannel} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title</label>
+                    <input
+                      type="text"
+                      required
+                      value={newChannel.title}
+                      onChange={(e) => setNewChannel({ ...newChannel, title: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      placeholder="Sunday Morning Service"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Group</label>
+                    <select
+                      required
+                      value={newChannel.group_id}
+                      onChange={(e) => setNewChannel({ ...newChannel, group_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    >
+                      <option value="">Select a group</option>
+                      {groups.map(group => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={newChannel.enable_pstn}
+                      onChange={(e) => setNewChannel({ ...newChannel, enable_pstn: e.target.checked })}
+                      className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Enable Phone Dial-in (PSTN) - Allow members to join by phone
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex space-x-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold disabled:opacity-50"
+                  >
+                    {loading ? 'Creating...' : 'Create Meeting Channel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateChannel(false)}
+                    className="bg-gray-500 text-white px-6 py-3 rounded-xl hover:bg-gray-600 transition-colors font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Available Channels */}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Meeting Channels</h2>
+            {availableChannels.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl shadow-lg">
+                <div className="text-6xl mb-4">📺</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Meeting Channels Created</h3>
+                <p className="text-gray-600 mb-6">Create your first church meeting channel to get started</p>
+                {user.role !== 'member' && (
+                  <button
+                    onClick={() => setShowCreateChannel(true)}
+                    className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold"
+                  >
+                    Create First Channel
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {availableChannels.map(channel => (
+                  <div key={channel.id} className="bg-white rounded-2xl shadow-lg p-6 border">
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{channel.title}</h3>
+                      <p className="text-sm text-gray-600">Channel: {channel.channel_name}</p>
+                      {channel.pstn_number && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                          <p className="text-xs text-blue-700">📞 Dial-in: {channel.pstn_number}</p>
+                          <p className="text-xs text-blue-700">Code: {channel.pstn_dtmf}</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => joinMeetingChannel(channel)}
+                        disabled={loading}
+                        className="flex-1 bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
+                      >
+                        {loading ? 'Joining...' : 'Join Meeting'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleJoinRoom = async (room) => {
     setLoading(true);
