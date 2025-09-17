@@ -103,11 +103,12 @@
 #====================================================================================================
 
 ## user_problem_statement: 
-CRITICAL BUG FIX: Fix Agora token generation error "500: Token generation failed: cannot import name 'Role_Publisher' from 'agora_token_builder'" 
-- The error occurs because Role_Publisher and Role_Subscriber classes were renamed in newer versions of agora-token-builder package
-- Need to update import statements and use correct role constants (1 for Publisher, 2 for Subscriber)
-- This is blocking all Agora video conferencing functionality
+CRITICAL FRONTEND BUG FIX: Fix AgoraUIKit "undefined 'role' property error" 
+- The error "Cannot read properties of undefined (reading 'role')" occurs because role property is not properly passed to AgoraUIKit component
+- Need to add role property to agoraConfig object and map church user roles to Agora roles (host/audience)
+- Add proper error handling for undefined roles and ensure role is always defined
 
+Backend context: Previously fixed Agora token generation import error - backend is now working (11/11 tests passed)
 Previous context: Implement Phase 2: Video Conferencing System with WebRTC-based solution (Daily.co or Agora) with support for up to 1,000 participants, group integration, cloud recording, screen sharing, host controls, live streaming, Scripture verse display, and auto-recording to 7TB cloud storage.
 
 ## backend:
