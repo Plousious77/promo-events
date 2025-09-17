@@ -65,18 +65,52 @@ const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await axios.post(`${API}/auth/register`, userData);
-      const { access_token, user: newUser } = response.data;
-      
-      localStorage.setItem('token', access_token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-      setUser(newUser);
-      
-      return { success: true };
+      await axios.post(`${API}/auth/register`, userData);
+      return { success: true, needsVerification: true };
     } catch (error) {
       return { 
         success: false, 
         error: error.response?.data?.detail || 'Registration failed' 
+      };
+    }
+  };
+
+  const verifyEmail = async (email, code) => {
+    try {
+      await axios.post(`${API}/auth/verify-email`, { email, verification_code: code });
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Verification failed' 
+      };
+    }
+  };
+
+  const resendVerification = async (email) => {
+    try {
+      await axios.post(`${API}/auth/resend-verification`, { email });
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Failed to resend verification' 
+      };
+    }
+  };
+
+  const changePassword = async (currentPassword, newPassword, confirmPassword) => {
+    try {
+      await axios.post(`${API}/auth/change-password`, {
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword
+      });
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Password change failed' 
       };
     }
   };
@@ -88,25 +122,42 @@ const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading, API }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      register, 
+      verifyEmail,
+      resendVerification,
+      changePassword,
+      logout, 
+      loading, 
+      API 
+    }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Login Component
-const LoginPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
+// Login/Register Component
+const AuthPage = () => {
+  const [activeTab, setActiveTab] = useState('login');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     full_name: '',
     phone: '',
-    role: 'member'
+    confirmPassword: ''
+  });
+  const [verificationData, setVerificationData] = useState({
+    email: '',
+    code: '',
+    show: false
   });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, user } = useAuth();
+  
+  const { user, login, register, verifyEmail, resendVerification } = useAuth();
 
   // Redirect if already authenticated
   if (user) {
@@ -117,17 +168,40 @@ const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
 
     try {
-      let result;
-      if (isLogin) {
-        result = await login(formData.email, formData.password);
+      if (activeTab === 'login') {
+        const result = await login(formData.email, formData.password);
+        if (!result.success) {
+          setError(result.error);
+        }
       } else {
-        result = await register(formData);
-      }
+        // Registration
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match');
+          setLoading(false);
+          return;
+        }
 
-      if (!result.success) {
-        setError(result.error);
+        const result = await register({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name,
+          phone: formData.phone
+        });
+
+        if (result.success) {
+          setVerificationData({
+            email: formData.email,
+            code: '',
+            show: true
+          });
+          setSuccess('Registration successful! Please check your email for verification code.');
+          setFormData({ email: '', password: '', full_name: '', phone: '', confirmPassword: '' });
+        } else {
+          setError(result.error);
+        }
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -136,9 +210,119 @@ const LoginPage = () => {
     }
   };
 
+  const handleVerification = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const result = await verifyEmail(verificationData.email, verificationData.code);
+    
+    if (result.success) {
+      setSuccess('Email verified successfully! You can now log in.');
+      setVerificationData({ email: '', code: '', show: false });
+      setActiveTab('login');
+    } else {
+      setError(result.error);
+    }
+    
+    setLoading(false);
+  };
+
+  const handleResendVerification = async () => {
+    setLoading(true);
+    const result = await resendVerification(verificationData.email);
+    
+    if (result.success) {
+      setSuccess('Verification code resent. Please check your email.');
+    } else {
+      setError(result.error);
+    }
+    
+    setLoading(false);
+  };
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  const handleVerificationChange = (e) => {
+    setVerificationData({ ...verificationData, [e.target.name]: e.target.value });
+  };
+
+  if (verificationData.show) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Verify Your Email</h1>
+            <p className="text-gray-600">Enter the 6-digit code sent to {verificationData.email}</p>
+          </div>
+
+          <form onSubmit={handleVerification} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Verification Code</label>
+              <input
+                type="text"
+                name="code"
+                value={verificationData.code}
+                onChange={handleVerificationChange}
+                maxLength={6}
+                placeholder="Enter 6-digit code"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-center text-lg font-mono"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
+                {success}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2 px-4 rounded-lg font-medium hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {loading ? 'Verifying...' : 'Verify Email'}
+            </button>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={loading}
+                className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+              >
+                Resend verification code
+              </button>
+            </div>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setVerificationData({ email: '', code: '', show: false })}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+              >
+                Back to registration
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-100 flex items-center justify-center p-4">
@@ -157,18 +341,18 @@ const LoginPage = () => {
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               type="button"
-              onClick={() => setIsLogin(true)}
+              onClick={() => setActiveTab('login')}
               className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-                isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500'
+                activeTab === 'login' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500'
               }`}
             >
               Sign In
             </button>
             <button
               type="button"
-              onClick={() => setIsLogin(false)}
+              onClick={() => setActiveTab('register')}
               className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-                !isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500'
+                activeTab === 'register' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500'
               }`}
             >
               Sign Up
@@ -177,7 +361,7 @@ const LoginPage = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {activeTab === 'register' && (
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
@@ -225,11 +409,36 @@ const LoginPage = () => {
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
+            {activeTab === 'register' && (
+              <p className="text-xs text-gray-500 mt-1">
+                Must be 8+ characters with uppercase, lowercase, and numbers
+              </p>
+            )}
           </div>
+
+          {activeTab === 'register' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+              <input
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              />
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
               {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
+              {success}
             </div>
           )}
 
@@ -238,35 +447,160 @@ const LoginPage = () => {
             disabled={loading}
             className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2 px-4 rounded-lg font-medium hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+            {loading ? 'Please wait...' : activeTab === 'login' ? 'Sign In' : 'Create Account'}
           </button>
         </form>
+
+        {activeTab === 'register' && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setVerificationData({ email: formData.email, code: '', show: true })}
+              className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+            >
+              Already have a verification code?
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-// Dashboard Component
-const Dashboard = () => {
-  const { user, logout } = useAuth();
+// Super Admin Dashboard
+const SuperAdminDashboard = () => {
+  const { user, logout, changePassword, API } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [users, setUsers] = useState([]);
+  const [adminRequests, setAdminRequests] = useState([]);
+  const [accessCodes, setAccessCodes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [codeForm, setCodeForm] = useState({
+    phone_last_four: ''
+  });
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  const getRoleDisplayName = (role) => {
-    switch (role) {
-      case 'super_admin': return 'Super Admin';
-      case 'group_admin': return 'Group Admin';
-      case 'team_leader': return 'Team Leader';
-      case 'member': return 'Member';
-      default: return 'Member';
+  useEffect(() => {
+    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'admin-requests') fetchAdminRequests();
+    if (activeTab === 'access-codes') fetchAccessCodes();
+  }, [activeTab]);
+
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/users`);
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+    }
+  };
+
+  const fetchAdminRequests = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/requests`);
+      setAdminRequests(response.data);
+    } catch (error) {
+      console.error('Failed to fetch admin requests:', error);
+    }
+  };
+
+  const fetchAccessCodes = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/access-codes`);
+      setAccessCodes(response.data);
+    } catch (error) {
+      console.error('Failed to fetch access codes:', error);
+    }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage({ type: '', text: '' });
+
+    const result = await changePassword(
+      passwordForm.currentPassword,
+      passwordForm.newPassword,
+      passwordForm.confirmPassword
+    );
+
+    if (result.success) {
+      setMessage({ type: 'success', text: 'Password changed successfully!' });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } else {
+      setMessage({ type: 'error', text: result.error });
+    }
+
+    setLoading(false);
+  };
+
+  const generateAccessCode = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await axios.post(`${API}/admin/generate-access-code`, codeForm);
+      setMessage({ type: 'success', text: `Access code ${response.data.access_code} generated successfully!` });
+      setCodeForm({ phone_last_four: '' });
+      fetchAccessCodes();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to generate access code' });
+    }
+
+    setLoading(false);
+  };
+
+  const approveRequest = async (requestId, notes = '') => {
+    try {
+      await axios.post(`${API}/admin/requests/${requestId}/approve`, { notes });
+      setMessage({ type: 'success', text: 'Admin request approved successfully!' });
+      fetchAdminRequests();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to approve request' });
+    }
+  };
+
+  const denyRequest = async (requestId, notes = '') => {
+    try {
+      await axios.post(`${API}/admin/requests/${requestId}/deny`, { notes });
+      setMessage({ type: 'success', text: 'Admin request denied' });
+      fetchAdminRequests();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to deny request' });
+    }
+  };
+
+  const updateUserRole = async (userId, newRole) => {
+    try {
+      await axios.put(`${API}/admin/users/${userId}/role`, { role: newRole });
+      setMessage({ type: 'success', text: 'User role updated successfully!' });
+      fetchUsers();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to update user role' });
+    }
+  };
+
+  const updateUserStatus = async (userId, newStatus) => {
+    try {
+      await axios.put(`${API}/admin/users/${userId}/status`, { status: newStatus });
+      setMessage({ type: 'success', text: 'User status updated successfully!' });
+      fetchUsers();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to update user status' });
     }
   };
 
   const navigation = [
     { id: 'dashboard', name: 'Dashboard', icon: '🏠' },
-    { id: 'tasks', name: 'Tasks', icon: '✅' },
-    { id: 'groups', name: 'Groups', icon: '👥' },
-    { id: 'chat', name: 'Chat', icon: '💬' },
-    { id: 'leaderboard', name: 'Leaderboard', icon: '🏆' },
+    { id: 'users', name: 'Users', icon: '👥' },
+    { id: 'admin-requests', name: 'Admin Requests', icon: '📋' },
+    { id: 'access-codes', name: 'Access Codes', icon: '🔑' },
+    { id: 'settings', name: 'Settings', icon: '⚙️' },
   ];
 
   return (
@@ -275,12 +609,12 @@ const Dashboard = () => {
       <div className="w-64 bg-white shadow-lg flex flex-col">
         <div className="p-6 border-b">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-lg">{user?.full_name?.charAt(0)}</span>
+            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
+              <span className="text-white font-bold text-lg">👑</span>
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">{user?.full_name}</h3>
-              <p className="text-sm text-gray-500">{getRoleDisplayName(user?.role)}</p>
+              <p className="text-sm text-purple-600 font-medium">Super Admin</p>
             </div>
           </div>
         </div>
@@ -293,7 +627,7 @@ const Dashboard = () => {
                   onClick={() => setActiveTab(item.id)}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
                     activeTab === item.id
-                      ? 'bg-emerald-50 text-emerald-700 border-l-4 border-emerald-500'
+                      ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-500'
                       : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
@@ -324,820 +658,445 @@ const Dashboard = () => {
               {navigation.find(item => item.id === activeTab)?.name || 'Dashboard'}
             </h1>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-purple-100 to-purple-200 px-4 py-2 rounded-full">
+              <div className="flex items-center space-x-2 bg-gradient-to-r from-purple-100 to-pink-200 px-4 py-2 rounded-full">
                 <span className="text-2xl">💰</span>
-                <span className="font-bold text-purple-700">{user?.coins || 0} YHWH Coins</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-amber-100 to-yellow-200 px-4 py-2 rounded-full">
-                <span className="text-2xl">⭐</span>
-                <span className="font-bold text-amber-700">{user?.points || 0} Points</span>
+                <span className="font-bold text-purple-700">{user?.coins?.toLocaleString() || 0} YHWH Coins</span>
               </div>
             </div>
           </div>
         </header>
 
         <main className="flex-1 p-6">
-          {activeTab === 'dashboard' && <DashboardContent />}
-          {activeTab === 'tasks' && <TasksContent />}
-          {activeTab === 'groups' && <GroupsContent />}
-          {activeTab === 'chat' && <ChatContent />}
-          {activeTab === 'leaderboard' && <LeaderboardContent />}
+          {message.text && (
+            <div className={`mb-4 px-4 py-3 rounded-lg ${
+              message.type === 'success' 
+                ? 'bg-green-50 border border-green-200 text-green-600' 
+                : 'bg-red-50 border border-red-200 text-red-600'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Users</p>
+                      <p className="text-3xl font-bold text-gray-900">{users.length}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">👥</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Pending Requests</p>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {adminRequests.filter(req => req.status === 'pending').length}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">📋</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Active Codes</p>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {accessCodes.filter(code => code.is_active && !code.used_at).length}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">🔑</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-amber-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Your Coins</p>
+                      <p className="text-3xl font-bold text-gray-900">{user?.coins?.toLocaleString() || 0}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">💰</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Welcome to Super Admin Dashboard</h3>
+                <p className="text-gray-600 mb-4">
+                  You have complete control over the Glory of Elshaddai Christian Center Connect system.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-900">Quick Actions</h4>
+                    <button 
+                      onClick={() => setActiveTab('admin-requests')}
+                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-xl">📋</span>
+                        <span className="font-medium">Review Admin Requests</span>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('access-codes')}
+                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-xl">🔑</span>
+                        <span className="font-medium">Generate Access Codes</span>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('users')}
+                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-xl">👥</span>
+                        <span className="font-medium">Manage Users</span>
+                      </div>
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-900">System Status</h4>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <p className="text-sm text-green-600">✅ System Running Normally</p>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-600">ℹ️ All Services Online</p>
+                    </div>
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <p className="text-sm text-purple-600">👑 Super Admin Access Active</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">All Users</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points/Coins</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {users.map((userItem) => (
+                        <tr key={userItem.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{userItem.full_name}</div>
+                              <div className="text-sm text-gray-500">{userItem.email}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <select
+                              value={userItem.role}
+                              onChange={(e) => updateUserRole(userItem.id, e.target.value)}
+                              className="text-sm border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="member">Member</option>
+                              <option value="team_leader">Team Leader</option>
+                              <option value="group_admin">Group Admin</option>
+                              <option value="super_admin">Super Admin</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <select
+                              value={userItem.status}
+                              onChange={(e) => updateUserStatus(userItem.id, e.target.value)}
+                              className="text-sm border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="active">Active</option>
+                              <option value="suspended">Suspended</option>
+                              <option value="locked">Locked</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {userItem.points} pts / {userItem.coins} coins
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              userItem.status === 'active' ? 'bg-green-100 text-green-800' :
+                              userItem.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {userItem.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'admin-requests' && (
+            <div className="space-y-6">
+              {adminRequests.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+                  <p className="text-gray-500">No admin requests found</p>
+                </div>
+              ) : (
+                adminRequests.map((request) => (
+                  <div key={request.id} className="bg-white rounded-xl shadow-sm p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">{request.full_name}</h3>
+                        <p className="text-gray-600">{request.email}</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        request.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {request.status.toUpperCase()}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Requested Role</p>
+                        <p className="font-medium">{request.requested_role.replace('_', ' ')}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Ministry Area</p>
+                        <p className="font-medium">{request.ministry_area}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Phone</p>
+                        <p className="font-medium">{request.phone}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Reference Contact</p>
+                        <p className="font-medium">{request.reference_contact}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-500">Experience</p>
+                      <p className="font-medium">{request.experience}</p>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-500">Reason for Request</p>
+                      <p className="font-medium">{request.reason}</p>
+                    </div>
+                    
+                    {request.status === 'pending' && (
+                      <div className="flex space-x-4">
+                        <button
+                          onClick={() => approveRequest(request.id)}
+                          className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => denyRequest(request.id)}
+                          className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'access-codes' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Generate New Access Code</h3>
+                <form onSubmit={generateAccessCode} className="flex space-x-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last 4 Digits of Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      value={codeForm.phone_last_four}
+                      onChange={(e) => setCodeForm({ phone_last_four: e.target.value })}
+                      maxLength={4}
+                      pattern="[0-9]{4}"
+                      placeholder="1234"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      required
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                    >
+                      Generate Code
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">Access Codes</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone Last 4</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expires</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {accessCodes.map((code) => (
+                        <tr key={code.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
+                            {code.code}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {code.phone_last_four}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              code.used_at ? 'bg-gray-100 text-gray-800' :
+                              new Date(code.expires_at) < new Date() ? 'bg-red-100 text-red-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {code.used_at ? 'Used' : 
+                               new Date(code.expires_at) < new Date() ? 'Expired' : 'Active'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(code.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(code.expires_at).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h3>
+                <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                    <input
+                      type="password"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <input
+                      type="password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be 8+ characters with uppercase, lowercase, and numbers
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <input
+                      type="password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                  >
+                    {loading ? 'Changing...' : 'Change Password'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
   );
 };
 
-// Dashboard Content Components
-const DashboardContent = () => {
-  const { user, API } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const response = await axios.get(`${API}/stats/user`);
-      setStats(response.data);
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
-
+// Regular User Dashboard (simplified for now)
+const RegularDashboard = () => {
+  const { user, logout } = useAuth();
+  
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-emerald-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Tasks</p>
-              <p className="text-3xl font-bold text-gray-900">{stats?.total_tasks || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">📋</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Completed</p>
-              <p className="text-3xl font-bold text-gray-900">{stats?.completed_tasks || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">✅</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-amber-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Points Earned</p>
-              <p className="text-3xl font-bold text-gray-900">{user?.points || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">⭐</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">YHWH Coins</p>
-              <p className="text-3xl font-bold text-gray-900">{user?.coins || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">💰</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Welcome Back, {user?.full_name}!</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <h4 className="font-medium text-gray-900 mb-2">Quick Actions</h4>
-            <div className="space-y-2">
-              <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <span className="text-xl">📝</span>
-                  <span className="font-medium">View My Tasks</span>
-                </div>
-              </button>
-              <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <span className="text-xl">💬</span>
-                  <span className="font-medium">Join Group Chat</span>
-                </div>
-              </button>
-              <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <span className="text-xl">🏆</span>
-                  <span className="font-medium">Check Leaderboard</span>
-                </div>
-              </button>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-medium text-gray-900 mb-2">Recent Activity</h4>
-            {stats?.recent_tasks && stats.recent_tasks.length > 0 ? (
-              <div className="space-y-2">
-                {stats.recent_tasks.slice(0, 3).map((task) => (
-                  <div key={task.id} className="p-3 bg-gray-50 rounded-lg">
-                    <p className="font-medium text-sm">{task.title}</p>
-                    <p className="text-xs text-gray-500">
-                      {task.points_reward} points • {task.coins_reward} coins
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">No recent tasks available</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Tasks Content Component
-const TasksContent = () => {
-  const { user, API } = useAuth();
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreateTask, setShowCreateTask] = useState(false);
-  const [newTask, setNewTask] = useState({
-    title: '',
-    description: '',
-    points_reward: 10,
-    coins_reward: 5,
-    priority: 'medium'
-  });
-
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
-    try {
-      const response = await axios.get(`${API}/tasks`);
-      setTasks(response.data);
-    } catch (error) {
-      console.error('Failed to fetch tasks:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createTask = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${API}/tasks`, newTask);
-      setNewTask({ title: '', description: '', points_reward: 10, coins_reward: 5, priority: 'medium' });
-      setShowCreateTask(false);
-      fetchTasks();
-    } catch (error) {
-      console.error('Failed to create task:', error);
-    }
-  };
-
-  const updateTaskStatus = async (taskId, status) => {
-    try {
-      await axios.put(`${API}/tasks/${taskId}/status`, { status });
-      fetchTasks();
-    } catch (error) {
-      console.error('Failed to update task status:', error);
-    }
-  };
-
-  const approveTask = async (taskId) => {
-    try {
-      await axios.put(`${API}/tasks/${taskId}/approve`);
-      fetchTasks();
-    } catch (error) {
-      console.error('Failed to approve task:', error);
-    }
-  };
-
-  const canCreateTasks = ['super_admin', 'group_admin', 'team_leader'].includes(user?.role);
-  const canApproveTasks = ['super_admin', 'group_admin', 'team_leader'].includes(user?.role);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">My Tasks</h2>
-        {canCreateTasks && (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b px-6 py-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Welcome, {user?.full_name}</h1>
           <button
-            onClick={() => setShowCreateTask(true)}
-            className="bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
+            onClick={logout}
+            className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
           >
-            Create Task
+            Sign Out
           </button>
-        )}
-      </div>
-
-      {showCreateTask && (
-        <div className="bg-white rounded-xl shadow-sm p-6 border">
-          <h3 className="text-lg font-semibold mb-4">Create New Task</h3>
-          <form onSubmit={createTask} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-              <input
-                type="text"
-                value={newTask.title}
-                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={newTask.description}
-                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Points Reward (1-100)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={newTask.points_reward}
-                  onChange={(e) => setNewTask({ ...newTask, points_reward: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">YHWH Coins Reward</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={newTask.coins_reward}
-                  onChange={(e) => setNewTask({ ...newTask, coins_reward: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select
-                  value={newTask.priority}
-                  onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                className="bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-              >
-                Create Task
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateTask(false)}
-                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4">
-        {tasks.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No tasks available</p>
-            {canCreateTasks && (
-              <button
-                onClick={() => setShowCreateTask(true)}
-                className="mt-4 text-emerald-600 hover:text-emerald-700 font-medium"
-              >
-                Create your first task
-              </button>
-            )}
+      </header>
+      
+      <main className="p-6">
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Dashboard Coming Soon</h2>
+          <p className="text-gray-600">
+            Your regular user dashboard is under construction. The super admin system is now active!
+          </p>
+          <div className="mt-4">
+            <p className="text-sm text-gray-500">Your role: <span className="font-medium">{user?.role}</span></p>
+            <p className="text-sm text-gray-500">Status: <span className="font-medium">{user?.status}</span></p>
           </div>
-        ) : (
-          tasks.map((task) => (
-            <div key={task.id} className="bg-white rounded-xl shadow-sm p-6 border">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
-                  {task.description && <p className="text-gray-600 mt-1">{task.description}</p>}
-                </div>
-                <div className="text-right">
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="text-amber-600 font-medium">⭐ {task.points_reward}</span>
-                    <span className="text-purple-600 font-medium">💰 {task.coins_reward}</span>
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                    task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {task.priority.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  task.status === 'approved' ? 'bg-green-100 text-green-800' :
-                  task.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                  task.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {task.status.replace('_', ' ').toUpperCase()}
-                </span>
-                
-                <div className="flex space-x-2">
-                  {task.assigned_to?.includes(user?.id) && task.status === 'pending' && (
-                    <button
-                      onClick={() => updateTaskStatus(task.id, 'in_progress')}
-                      className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors"
-                    >
-                      Start Task
-                    </button>
-                  )}
-                  {task.assigned_to?.includes(user?.id) && task.status === 'in_progress' && (
-                    <button
-                      onClick={() => updateTaskStatus(task.id, 'completed')}
-                      className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
-                    >
-                      Mark Complete
-                    </button>
-                  )}
-                  {canApproveTasks && task.status === 'completed' && (
-                    <button
-                      onClick={() => approveTask(task.id)}
-                      className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600 transition-colors"
-                    >
-                      Approve & Reward
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Groups Content Component
-const GroupsContent = () => {
-  const { user, API } = useAuth();
-  const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [newGroup, setNewGroup] = useState({
-    name: '',
-    description: '',
-    group_type: 'Ministry'
-  });
-
-  useEffect(() => {
-    fetchGroups();
-  }, []);
-
-  const fetchGroups = async () => {
-    try {
-      const response = await axios.get(`${API}/groups`);
-      setGroups(response.data);
-    } catch (error) {
-      console.error('Failed to fetch groups:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createGroup = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${API}/groups`, newGroup);
-      setNewGroup({ name: '', description: '', group_type: 'Ministry' });
-      setShowCreateGroup(false);
-      fetchGroups();
-    } catch (error) {
-      console.error('Failed to create group:', error);
-    }
-  };
-
-  const canCreateGroups = ['super_admin', 'group_admin'].includes(user?.role);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Groups</h2>
-        {canCreateGroups && (
-          <button
-            onClick={() => setShowCreateGroup(true)}
-            className="bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-          >
-            Create Group
-          </button>
-        )}
-      </div>
-
-      {showCreateGroup && (
-        <div className="bg-white rounded-xl shadow-sm p-6 border">
-          <h3 className="text-lg font-semibold mb-4">Create New Group</h3>
-          <form onSubmit={createGroup} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
-              <input
-                type="text"
-                value={newGroup.name}
-                onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={newGroup.description}
-                onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Group Type</label>
-              <select
-                value={newGroup.group_type}
-                onChange={(e) => setNewGroup({ ...newGroup, group_type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              >
-                <option value="Ministry">Ministry Team</option>
-                <option value="Age Group">Age Group</option>
-                <option value="Interest Group">Interest Group</option>
-                <option value="Service Team">Service Team</option>
-              </select>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                className="bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-              >
-                Create Group
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateGroup(false)}
-                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {groups.length === 0 ? (
-          <div className="col-span-full text-center py-12">
-            <p className="text-gray-500">No groups available</p>
-            {canCreateGroups && (
-              <button
-                onClick={() => setShowCreateGroup(true)}
-                className="mt-4 text-emerald-600 hover:text-emerald-700 font-medium"
-              >
-                Create your first group
-              </button>
-            )}
-          </div>
-        ) : (
-          groups.map((group) => (
-            <div key={group.id} className="bg-white rounded-xl shadow-sm p-6 border hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">{group.name.charAt(0)}</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{group.name}</h3>
-                  <p className="text-sm text-gray-500">{group.group_type}</p>
-                </div>
-              </div>
-              
-              {group.description && (
-                <p className="text-gray-600 mb-4">{group.description}</p>
-              )}
-              
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">
-                  {group.members?.length || 0} members
-                </span>
-                <button className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-lg text-sm hover:bg-emerald-100 transition-colors">
-                  View Group
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Chat Content Component
-const ChatContent = () => {
-  const { user, API } = useAuth();
-  const [groups, setGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchGroups();
-  }, []);
-
-  useEffect(() => {
-    if (selectedGroup) {
-      fetchMessages(selectedGroup.id);
-    }
-  }, [selectedGroup]);
-
-  const fetchGroups = async () => {
-    try {
-      const response = await axios.get(`${API}/groups`);
-      setGroups(response.data);
-      if (response.data.length > 0) {
-        setSelectedGroup(response.data[0]);
-      }
-    } catch (error) {
-      console.error('Failed to fetch groups:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchMessages = async (groupId) => {
-    try {
-      const response = await axios.get(`${API}/messages/group/${groupId}`);
-      setMessages(response.data);
-    } catch (error) {
-      console.error('Failed to fetch messages:', error);
-    }
-  };
-
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !selectedGroup) return;
-
-    try {
-      await axios.post(`${API}/messages`, {
-        content: newMessage,
-        group_id: selectedGroup.id
-      });
-      setNewMessage('');
-      fetchMessages(selectedGroup.id);
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
-
-  if (groups.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">No groups available for chat. Join a group first!</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-96 bg-white rounded-xl shadow-sm overflow-hidden">
-      {/* Groups Sidebar */}
-      <div className="w-1/3 border-r border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900">Group Chats</h3>
-        </div>
-        <div className="overflow-y-auto">
-          {groups.map((group) => (
-            <button
-              key={group.id}
-              onClick={() => setSelectedGroup(group)}
-              className={`w-full text-left p-4 hover:bg-gray-50 border-b border-gray-100 transition-colors ${
-                selectedGroup?.id === group.id ? 'bg-emerald-50 border-l-4 border-emerald-500' : ''
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">{group.name.charAt(0)}</span>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{group.name}</p>
-                  <p className="text-sm text-gray-500">{group.group_type}</p>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {selectedGroup ? (
-          <>
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">{selectedGroup.name}</h3>
-              <p className="text-sm text-gray-500">{selectedGroup.description}</p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.length === 0 ? (
-                <div className="text-center text-gray-500">
-                  <p>No messages yet. Start the conversation!</p>
-                </div>
-              ) : (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        message.sender_id === user?.id
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-gray-200 text-gray-900'
-                      }`}
-                    >
-                      <p className="text-sm">{message.content}</p>
-                      <p className="text-xs opacity-75 mt-1">
-                        {new Date(message.created_at).toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <form onSubmit={sendMessage} className="p-4 border-t border-gray-200">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-                <button
-                  type="submit"
-                  className="bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-                >
-                  Send
-                </button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
-            <p>Select a group to start chatting</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Leaderboard Content Component
-const LeaderboardContent = () => {
-  const { API } = useAuth();
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchLeaderboard();
-  }, []);
-
-  const fetchLeaderboard = async () => {
-    try {
-      const response = await axios.get(`${API}/leaderboard`);
-      setLeaderboard(response.data);
-    } catch (error) {
-      console.error('Failed to fetch leaderboard:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">🏆 Leaderboard</h2>
-        <p className="text-gray-600">Top performers in our community</p>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {leaderboard.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No data available yet. Complete some tasks to see the leaderboard!</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {leaderboard.map((member, index) => (
-              <div key={member.id} className="p-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ${
-                    index === 0 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                    index === 1 ? 'bg-gradient-to-r from-gray-400 to-gray-600' :
-                    index === 2 ? 'bg-gradient-to-r from-orange-400 to-orange-600' :
-                    'bg-gradient-to-r from-emerald-500 to-teal-600'
-                  }`}>
-                    {index < 3 ? (
-                      <span className="text-lg">
-                        {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                      </span>
-                    ) : (
-                      <span>#{index + 1}</span>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{member.full_name}</h3>
-                    <div className="flex items-center space-x-4 text-sm text-gray-500">
-                      <span>⭐ {member.points} points</span>
-                      <span>💰 {member.coins} YHWH coins</span>
-                    </div>
-                  </div>
-                </div>
-                {index < 3 && (
-                  <div className="text-right">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                      index === 1 ? 'bg-gray-100 text-gray-800' :
-                      'bg-orange-100 text-orange-800'
-                    }`}>
-                      {index === 0 ? 'Champion' : index === 1 ? 'Runner-up' : '3rd Place'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </main>
     </div>
   );
 };
@@ -1154,7 +1113,7 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  return user ? children : <Navigate to="/login" />;
+  return user ? children : <Navigate to="/auth" />;
 };
 
 // Main App Component
@@ -1163,7 +1122,7 @@ const App = () => {
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth" element={<AuthPage />} />
           <Route
             path="/"
             element={
@@ -1177,6 +1136,17 @@ const App = () => {
       </Router>
     </AuthProvider>
   );
+};
+
+// Dashboard Router Component
+const Dashboard = () => {
+  const { user } = useAuth();
+  
+  if (user?.role === 'super_admin') {
+    return <SuperAdminDashboard />;
+  }
+  
+  return <RegularDashboard />;
 };
 
 export default App;
