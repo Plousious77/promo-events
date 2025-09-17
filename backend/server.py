@@ -1376,6 +1376,137 @@ async def initialize_system():
         "note": "Please change this password immediately after first login"
     }
 
+# Task Management Models for Phase 2 - Time Tracking & Punctuality System
+class TaskType:
+    INDIVIDUAL = "individual"
+    GROUP = "group"
+    FAMILY = "family"
+    ALL_MEMBERS = "all_members"
+
+class TaskCategory:
+    MINISTRY = "Ministry"
+    SERVICE = "Service"
+    STUDY = "Study"
+    WORSHIP = "Worship"
+    OUTREACH = "Outreach"
+    LEADERSHIP = "Leadership"
+    SPECIAL_EVENT = "Special Event"
+
+class TaskStatus:
+    SCHEDULED = "scheduled"
+    ACTIVE = "active"  # Task is currently happening
+    COMPLETED = "completed"
+    MISSED = "missed"
+    CANCELLED = "cancelled"
+
+class AttendanceStatus:
+    NOT_STARTED = "not_started"
+    PUNCHED_IN = "punched_in"
+    COMPLETED = "completed"
+    LATE = "late"
+    MISSED = "missed"
+
+class TaskCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: str = TaskCategory.MINISTRY
+    task_type: str = TaskType.INDIVIDUAL
+    assigned_users: List[str] = []
+    assigned_groups: List[str] = []
+    start_datetime: datetime
+    end_datetime: datetime
+    location_address: Optional[str] = None
+    virtual_link: Optional[str] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+    check_in_radius_meters: int = 100
+    points_reward: int = 10
+    coins_reward: int = 5
+    punctuality_bonus_points: int = 5
+    punctuality_bonus_coins: int = 2
+    streak_bonus_points: int = 3
+    streak_bonus_coins: int = 1
+    late_penalty_points: int = 0
+    no_show_penalty_points: int = 5
+    instructions: Optional[str] = None
+    required_materials: Optional[str] = None
+    contact_person: Optional[str] = None
+    prerequisites: Optional[str] = None
+    max_participants: Optional[int] = None
+    min_age: Optional[int] = None
+    is_recurring: bool = False
+    recurrence_pattern: Optional[str] = None
+
+class Task(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: Optional[str] = None
+    category: str = TaskCategory.MINISTRY
+    task_type: str = TaskType.INDIVIDUAL
+    creator_id: str
+    assigned_users: List[str] = []
+    assigned_groups: List[str] = []
+    start_datetime: datetime
+    end_datetime: datetime
+    location_address: Optional[str] = None
+    virtual_link: Optional[str] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+    check_in_radius_meters: int = 100
+    points_reward: int = 10
+    coins_reward: int = 5
+    punctuality_bonus_points: int = 5
+    punctuality_bonus_coins: int = 2
+    streak_bonus_points: int = 3
+    streak_bonus_coins: int = 1
+    late_penalty_points: int = 0
+    no_show_penalty_points: int = 5
+    instructions: Optional[str] = None
+    required_materials: Optional[str] = None
+    contact_person: Optional[str] = None
+    prerequisites: Optional[str] = None
+    max_participants: Optional[int] = None
+    min_age: Optional[int] = None
+    is_recurring: bool = False
+    recurrence_pattern: Optional[str] = None
+    status: str = TaskStatus.SCHEDULED
+    participant_count: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+
+class TaskAttendance(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    task_id: str
+    user_id: str
+    punch_in_time: Optional[datetime] = None
+    punch_out_time: Optional[datetime] = None
+    status: str = AttendanceStatus.NOT_STARTED
+    is_late: bool = False
+    minutes_late: int = 0
+    is_within_grace_period: bool = True
+    points_earned: int = 0
+    coins_earned: int = 0
+    location_verified: bool = False
+    punch_in_latitude: Optional[float] = None
+    punch_in_longitude: Optional[float] = None
+    photo_verification_url: Optional[str] = None
+    completion_notes: Optional[str] = None
+    task_rating: Optional[int] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PunchInRequest(BaseModel):
+    task_id: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    photo_verification: Optional[str] = None
+
+class PunchOutRequest(BaseModel):
+    task_id: str
+    completion_notes: Optional[str] = None
+    task_rating: Optional[int] = Field(None, ge=1, le=5)
+
 # Daily.co Video Conferencing Integration
 DAILY_API_KEY = os.environ.get("DAILY_API_KEY", "your-daily-api-key-here")
 DAILY_DOMAIN = os.environ.get("DAILY_DOMAIN", "your-domain.daily.co")
