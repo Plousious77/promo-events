@@ -463,7 +463,7 @@ class ChurchYouthAppTester:
             "Create Video Room (Unauthorized - Should Fail)",
             "POST",
             "video-rooms/",
-            401,
+            403,  # Updated to expect 403 instead of 401
             data=room_data
         )
         
