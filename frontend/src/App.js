@@ -1003,14 +1003,77 @@ const SuperAdminDashboard = () => {
 
           {activeTab === 'users' && (
             <div className="space-y-6">
+              {/* Bulk Actions Bar */}
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm font-medium text-gray-700">
+                      {selectedUsers.length} user(s) selected
+                    </span>
+                    {selectedUsers.length > 0 && (
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => bulkUserAction('activate')}
+                          className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
+                        >
+                          Activate
+                        </button>
+                        <button
+                          onClick={() => bulkUserAction('deactivate')}
+                          className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 transition-colors"
+                        >
+                          Deactivate
+                        </button>
+                        <button
+                          onClick={() => bulkUserAction('reset_password')}
+                          className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors"
+                        >
+                          Reset Passwords
+                        </button>
+                        <select
+                          onChange={(e) => e.target.value && bulkUserAction('change_role', e.target.value)}
+                          className="text-sm border border-gray-300 rounded px-2 py-1"
+                          defaultValue=""
+                        >
+                          <option value="">Change Role...</option>
+                          <option value="member">To Member</option>
+                          <option value="team_leader">To Team Leader</option>
+                          <option value="group_admin">To Group Admin</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSelectedUsers([])}
+                    className="text-gray-500 hover:text-gray-700 text-sm"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+
+              {/* Users Table */}
               <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900">All Users</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedUsers(users.map(u => u.id));
+                              } else {
+                                setSelectedUsers([]);
+                              }
+                            }}
+                            checked={selectedUsers.length === users.length && users.length > 0}
+                          />
+                        </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -1020,11 +1083,27 @@ const SuperAdminDashboard = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {users.map((userItem) => (
-                        <tr key={userItem.id}>
+                        <tr key={userItem.id} className={selectedUsers.includes(userItem.id) ? 'bg-purple-50' : ''}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={selectedUsers.includes(userItem.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedUsers([...selectedUsers, userItem.id]);
+                                } else {
+                                  setSelectedUsers(selectedUsers.filter(id => id !== userItem.id));
+                                }
+                              }}
+                            />
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div>
                               <div className="text-sm font-medium text-gray-900">{userItem.full_name}</div>
                               <div className="text-sm text-gray-500">{userItem.email}</div>
+                              {userItem.phone && (
+                                <div className="text-xs text-gray-400">{userItem.phone}</div>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -1051,16 +1130,32 @@ const SuperAdminDashboard = () => {
                             </select>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {userItem.points} pts / {userItem.coins} coins
+                            <div className="flex items-center space-x-2">
+                              <span className="bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-xs">
+                                {userItem.points} pts
+                              </span>
+                              <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">
+                                {userItem.coins} coins
+                              </span>
+                            </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              userItem.status === 'active' ? 'bg-green-100 text-green-800' :
-                              userItem.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {userItem.status}
-                            </span>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center space-x-2">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                userItem.status === 'active' ? 'bg-green-100 text-green-800' :
+                                userItem.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {userItem.status}
+                              </span>
+                              <button
+                                onClick={() => resetUserPassword(userItem.id)}
+                                className="text-blue-600 hover:text-blue-800 text-xs"
+                                title="Reset Password"
+                              >
+                                🔑 Reset
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
