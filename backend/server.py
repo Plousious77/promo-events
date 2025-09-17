@@ -2022,6 +2022,164 @@ async def delete_church_video_room(
         logging.error(f"Failed to delete church video room: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete video room")
 
+# Group Member Management Routes
+@api_router.get("/groups/{group_id}/members", response_model=List[User])
+async def get_group_members(
+    group_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all members of a specific group"""
+    try:
+        # Check if group exists and user has access
+        group = await db.groups.find_one({"id": group_id, "is_active": True})
+        if not group:
+            raise HTTPException(status_code=404, detail="Group not found")
+        
+        # Get all users who are members of this group
+        members = await db.users.find({
+            "group_id": group_id,
+            "status": AccountStatus.ACTIVE
+        }).to_list(None)
+        
+        return [User(**parse_from_mongo(member)) for member in members]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to fetch group members: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch group members"
+        )
+
+@api_router.post("/groups/{group_id}/members")
+async def add_group_members(
+    group_id: str,
+    member_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Add members to a group"""
+    try:
+        # Check permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        
+        # Check if group exists
+        group = await db.groups.find_one({"id": group_id, "is_active": True})
+        if not group:
+            raise HTTPException(status_code=404, detail="Group not found")
+        
+        user_ids = member_data.get("user_ids", [])
+        if not user_ids:
+            raise HTTPException(status_code=400, detail="No users specified")
+        
+        # Validate users exist and update their group_id
+        added_count = 0
+        for user_id in user_ids:
+            result = await db.users.update_one(
+                {"id": user_id, "status": AccountStatus.ACTIVE},
+                {"$set": {"group_id": group_id, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            if result.modified_count > 0:
+                added_count += 1
+        
+        # Update group member count
+        total_members = await db.users.count_documents({"group_id": group_id, "status": AccountStatus.ACTIVE})
+        await db.groups.update_one(
+            {"id": group_id},
+            {"$set": {"member_count": total_members, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="add_group_members",
+            target_type="group",
+            target_id=group_id,
+            details={
+                "group_name": group["name"],
+                "added_members": added_count,
+                "user_ids": user_ids
+            }
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {"message": f"Added {added_count} member(s) to group", "added_count": added_count}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to add group members: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add group members"
+        )
+
+@api_router.delete("/groups/{group_id}/members/{user_id}")
+async def remove_group_member(
+    group_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Remove a member from a group"""
+    try:
+        # Check permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            # Allow users to remove themselves
+            if current_user.id != user_id:
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
+        
+        # Check if group exists
+        group = await db.groups.find_one({"id": group_id, "is_active": True})
+        if not group:
+            raise HTTPException(status_code=404, detail="Group not found")
+        
+        # Get user details for logging
+        user = await db.users.find_one({"id": user_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Remove user from group
+        result = await db.users.update_one(
+            {"id": user_id, "group_id": group_id},
+            {"$unset": {"group_id": ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="User not found in this group")
+        
+        # Update group member count
+        total_members = await db.users.count_documents({"group_id": group_id, "status": AccountStatus.ACTIVE})
+        await db.groups.update_one(
+            {"id": group_id},
+            {"$set": {"member_count": total_members, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="remove_group_member",
+            target_type="group",
+            target_id=group_id,
+            details={
+                "group_name": group["name"],
+                "removed_user": user["full_name"],
+                "removed_user_id": user_id
+            }
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {"message": f"Removed {user['full_name']} from group"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to remove group member: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove group member"
+        )
+
 # Task Management Routes - Phase 2 Time Tracking System
 
 # Include the router in the main app
