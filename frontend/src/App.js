@@ -794,6 +794,15 @@ const SuperAdminPortal = () => {
                 />
               )}
 
+              {activeTab === 'time-tracking' && (
+                <TimeTrackingContent 
+                  API={API}
+                  groups={groups}
+                  users={users}
+                  setMessage={setMessage}
+                />
+              )}
+
               {activeTab === 'activities' && (
                 <SystemActivitiesContent activities={activities} users={users} />
               )}
