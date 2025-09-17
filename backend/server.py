@@ -64,6 +64,30 @@ class AdminRequestStatus:
     APPROVED = "approved"
     DENIED = "denied"
 
+# Group Types
+class GroupType:
+    MINISTRY = "Ministry"
+    AGE_GROUP = "Age Group"
+    SERVICE_TEAM = "Service Team"
+    LEADERSHIP_CIRCLE = "Leadership Circle"
+    INTEREST_GROUP = "Interest Group"
+
+# Training Video Categories
+class VideoCategory:
+    NEW_USER = "New User"
+    ADMIN_TRAINING = "Admin Training"
+    LEADERSHIP = "Leadership"
+    TECHNICAL = "Technical"
+    GENERAL = "General"
+
+# Meeting Types
+class MeetingType:
+    ADMIN = "Admin"
+    MINISTRY = "Ministry"
+    LEADERSHIP = "Leadership"
+    ALL_HANDS = "All-Hands"
+    EMERGENCY = "Emergency"
+
 # Pydantic Models
 class UserRegistration(BaseModel):
     email: EmailStr
