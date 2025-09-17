@@ -834,7 +834,10 @@ const SuperAdminDashboard = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Total Users</p>
-                      <p className="text-3xl font-bold text-gray-900">{users.length}</p>
+                      <p className="text-3xl font-bold text-gray-900">{analytics?.users?.total || users.length}</p>
+                      <p className="text-xs text-gray-400">
+                        {analytics?.users?.active || 0} active • {analytics?.users?.inactive || 0} inactive
+                      </p>
                     </div>
                     <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                       <span className="text-2xl">👥</span>
@@ -845,13 +848,12 @@ const SuperAdminDashboard = () => {
                 <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Pending Requests</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {adminRequests.filter(req => req.status === 'pending').length}
-                      </p>
+                      <p className="text-sm font-medium text-gray-600">Total Groups</p>
+                      <p className="text-3xl font-bold text-gray-900">{analytics?.groups?.total || groups.length}</p>
+                      <p className="text-xs text-gray-400">Active groups</p>
                     </div>
                     <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">📋</span>
+                      <span className="text-2xl">🫂</span>
                     </div>
                   </div>
                 </div>
@@ -859,13 +861,14 @@ const SuperAdminDashboard = () => {
                 <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Active Codes</p>
+                      <p className="text-sm font-medium text-gray-600">Pending Requests</p>
                       <p className="text-3xl font-bold text-gray-900">
-                        {accessCodes.filter(code => code.is_active && !code.used_at).length}
+                        {adminRequests.filter(req => req.status === 'pending').length}
                       </p>
+                      <p className="text-xs text-gray-400">Admin requests</p>
                     </div>
                     <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">🔑</span>
+                      <span className="text-2xl">📋</span>
                     </div>
                   </div>
                 </div>
@@ -875,9 +878,70 @@ const SuperAdminDashboard = () => {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Your Coins</p>
                       <p className="text-3xl font-bold text-gray-900">{user?.coins?.toLocaleString() || 0}</p>
+                      <p className="text-xs text-gray-400">YHWH Kingdom Coins</p>
                     </div>
                     <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
                       <span className="text-2xl">💰</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Donations</p>
+                      <p className="text-3xl font-bold text-gray-900">
+                        ${donations?.total_amount?.toLocaleString() || '0'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {donations?.total_count || 0} donations
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">💝</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Training Videos</p>
+                      <p className="text-3xl font-bold text-gray-900">{trainingVideos.length}</p>
+                      <p className="text-xs text-gray-400">Active videos</p>
+                    </div>
+                    <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">🎓</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-pink-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Upcoming Meetings</p>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {meetings.filter(m => new Date(m.scheduled_date) > new Date()).length}
+                      </p>
+                      <p className="text-xs text-gray-400">Scheduled meetings</p>
+                    </div>
+                    <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">📅</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-teal-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Recent Activity</p>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {analytics?.activity?.recent_actions || activities.length}
+                      </p>
+                      <p className="text-xs text-gray-400">Last 7 days</p>
+                    </div>
+                    <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">📊</span>
                     </div>
                   </div>
                 </div>
