@@ -1726,4 +1726,351 @@ const Dashboard = () => {
   return <RegularDashboard />;
 };
 
+// Video Conference Content Component
+const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
+  const [videoRooms, setVideoRooms] = useState([]);
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
+  const [activeRoom, setActiveRoom] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [callObject, setCallObject] = useState(null);
+
+  // Room creation form state
+  const [newRoom, setNewRoom] = useState({
+    max_participants: 200,
+    enable_recording: false,
+    enable_screenshare: true,
+    enable_livestreaming: false,
+    group_id: '',
+    expires_in_minutes: 60
+  });
+
+  useEffect(() => {
+    fetchVideoRooms();
+  }, []);
+
+  const fetchVideoRooms = async () => {
+    try {
+      const response = await axios.get(`${API}/video-rooms/`);
+      setVideoRooms(response.data);
+    } catch (error) {
+      console.error('Failed to fetch video rooms:', error);
+      setMessage({ type: 'error', text: 'Failed to fetch video rooms' });
+    }
+  };
+
+  const handleCreateRoom = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await axios.post(`${API}/video-rooms/`, newRoom);
+      setMessage({ type: 'success', text: 'Video room created successfully!' });
+      setNewRoom({
+        max_participants: 200,
+        enable_recording: false,
+        enable_screenshare: true,
+        enable_livestreaming: false,
+        group_id: '',
+        expires_in_minutes: 60
+      });
+      setShowCreateRoom(false);
+      fetchVideoRooms();
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to create video room' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinRoom = async (roomId) => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API}/video-rooms/${roomId}/join-token`);
+      const { token, room_url } = response.data;
+      
+      // Create Daily call object
+      const newCallObject = DailyIframe.createCallObject({
+        url: room_url,
+        token: token,
+      });
+
+      setCallObject(newCallObject);
+      setActiveRoom(roomId);
+      
+      // Join the call
+      await newCallObject.join();
+      
+      setMessage({ type: 'success', text: 'Joined video conference successfully!' });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to join video room' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLeaveRoom = async () => {
+    if (callObject) {
+      await callObject.leave();
+      await callObject.destroy();
+      setCallObject(null);
+      setActiveRoom(null);
+      setMessage({ type: 'success', text: 'Left video conference' });
+    }
+  };
+
+  const handleDeleteRoom = async (roomId) => {
+    if (window.confirm('Are you sure you want to delete this video room? This action cannot be undone.')) {
+      try {
+        await axios.delete(`${API}/video-rooms/${roomId}`);
+        setMessage({ type: 'success', text: 'Video room deleted successfully!' });
+        fetchVideoRooms();
+      } catch (error) {
+        setMessage({ 
+          type: 'error', 
+          text: error.response?.data?.detail || 'Failed to delete video room' 
+        });
+      }
+    }
+  };
+
+  // If user is in an active room, show the video conference interface
+  if (activeRoom && callObject) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Active Video Conference</h2>
+            <button
+              onClick={handleLeaveRoom}
+              className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors"
+            >
+              Leave Meeting
+            </button>
+          </div>
+          
+          {/* Daily.co iframe container */}
+          <div className="bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
+            <div id="daily-call-container" className="w-full h-full">
+              {/* Daily.co will inject the video interface here */}
+              <p className="text-white text-center p-8">
+                Video conference is loading... Please wait.
+              </p>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-4 bg-blue-50 rounded-xl">
+            <p className="text-blue-800">
+              <strong>💡 Tip:</strong> Use the video controls to mute/unmute, share screen, and manage participants.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Video Conference Rooms</h2>
+          <p className="text-gray-600">Create and manage video conference rooms</p>
+        </div>
+        <button
+          onClick={() => setShowCreateRoom(true)}
+          className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors shadow-lg"
+        >
+          <span className="flex items-center space-x-2">
+            <span>📹</span>
+            <span>Create Video Room</span>
+          </span>
+        </button>
+      </div>
+
+      {/* Create Room Form */}
+      {showCreateRoom && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 border">
+          <h3 className="text-xl font-bold mb-6">Create New Video Room</h3>
+          <form onSubmit={handleCreateRoom} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Max Participants</label>
+                <select
+                  value={newRoom.max_participants}
+                  onChange={(e) => setNewRoom({ ...newRoom, max_participants: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                >
+                  <option value={50}>50 participants</option>
+                  <option value={200}>200 participants</option>
+                  <option value={500}>500 participants</option>
+                  <option value={1000}>1,000 participants</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Group (Optional)</label>
+                <select
+                  value={newRoom.group_id}
+                  onChange={(e) => setNewRoom({ ...newRoom, group_id: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                >
+                  <option value="">All groups</option>
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Room Duration (minutes)</label>
+                <input
+                  type="number"
+                  min="15"
+                  max="480"
+                  value={newRoom.expires_in_minutes}
+                  onChange={(e) => setNewRoom({ ...newRoom, expires_in_minutes: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={newRoom.enable_recording}
+                  onChange={(e) => setNewRoom({ ...newRoom, enable_recording: e.target.checked })}
+                  className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                />
+                <span className="ml-3 text-sm font-medium text-gray-700">Enable Cloud Recording</span>
+              </label>
+              
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={newRoom.enable_screenshare}
+                  onChange={(e) => setNewRoom({ ...newRoom, enable_screenshare: e.target.checked })}
+                  className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                />
+                <span className="ml-3 text-sm font-medium text-gray-700">Enable Screen Sharing</span>
+              </label>
+              
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={newRoom.enable_livestreaming}
+                  onChange={(e) => setNewRoom({ ...newRoom, enable_livestreaming: e.target.checked })}
+                  className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                />
+                <span className="ml-3 text-sm font-medium text-gray-700">Enable Live Streaming</span>
+              </label>
+            </div>
+            
+            <div className="flex space-x-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors shadow-lg"
+              >
+                {loading ? 'Creating...' : 'Create Room'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateRoom(false)}
+                className="bg-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Video Rooms Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {videoRooms.length === 0 ? (
+          <div className="col-span-full text-center py-12 bg-white rounded-2xl shadow-lg">
+            <div className="text-6xl mb-4">📹</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">No Video Rooms Created</h3>
+            <p className="text-gray-600 mb-6">Get started by creating your first video conference room</p>
+            <button
+              onClick={() => setShowCreateRoom(true)}
+              className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors"
+            >
+              Create First Room
+            </button>
+          </div>
+        ) : (
+          videoRooms.map((room) => (
+            <div key={room.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-200 border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                    📹
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{room.daily_room_name}</h3>
+                    <p className="text-sm text-gray-500">Video Conference</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Active
+                </span>
+              </div>
+              
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Max Participants:</span>
+                  <span className="font-medium text-gray-900">{room.max_participants}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Recording:</span>
+                  <span className="font-medium text-gray-900">
+                    {room.enable_recording ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Screen Share:</span>
+                  <span className="font-medium text-gray-900">
+                    {room.enable_screenshare ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Expires:</span>
+                  <span className="font-medium text-gray-900 text-xs">
+                    {new Date(room.expires_at).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handleJoinRoom(room.id)}
+                  disabled={loading}
+                  className="flex-1 bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
+                >
+                  {loading ? 'Joining...' : 'Join Room'}
+                </button>
+                <button
+                  onClick={() => handleDeleteRoom(room.id)}
+                  className="bg-gray-50 text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-100 transition-colors font-medium"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default App;
