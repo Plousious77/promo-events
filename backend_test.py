@@ -910,7 +910,26 @@ def main():
         tester.test_create_group_as_member()  # Should fail
         tester.test_get_groups(tester.member_token, "member")
     
-    # VIDEO CONFERENCING TESTS - Main focus
+    # AGORA TOKEN GENERATION TESTS - CRITICAL BUG FIX
+    print("\n🔥 AGORA TOKEN GENERATION TESTS - CRITICAL BUG FIX")
+    print("-" * 55)
+    print("Testing fix for: 'cannot import name Role_Publisher from agora_token_builder'")
+    
+    if tester.admin_token:
+        # Core Agora token generation tests
+        tester.test_agora_import_error_resolution()  # Most critical test
+        tester.test_agora_token_generation_host_role()
+        tester.test_agora_token_generation_participant_role()
+        tester.test_agora_token_generation_different_channels()
+        tester.test_agora_token_generation_custom_expiry()
+        
+        # Authorization tests
+        tester.test_agora_token_generation_unauthorized()
+        tester.test_agora_token_generation_invalid_role()
+    else:
+        print("❌ No admin token available for Agora token generation tests")
+
+    # VIDEO CONFERENCING TESTS - Daily.co Integration
     print("\n🎥 VIDEO CONFERENCING TESTS (Daily.co Integration)")
     print("-" * 50)
     
