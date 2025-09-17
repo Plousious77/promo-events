@@ -474,7 +474,14 @@ const SuperAdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [adminRequests, setAdminRequests] = useState([]);
   const [accessCodes, setAccessCodes] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [trainingVideos, setTrainingVideos] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [donations, setDonations] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState([]);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
