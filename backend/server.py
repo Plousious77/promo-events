@@ -1521,6 +1521,42 @@ class AgoraTokenRequest(BaseModel):
     role: str  # 'host', 'participant'
     expire_time: int = 3600
 
+# New Managed Services API Models
+class CreateChannelRequest(BaseModel):
+    group_id: str
+    title: str
+    enable_pstn: bool = True
+
+class JoinChannelRequest(BaseModel):
+    passphrase: str
+    jwt_token: str
+
+class ShareChannelRequest(BaseModel):
+    passphrase: str
+    jwt_token: str
+
+class RecordingRequest(BaseModel):
+    passphrase: str
+    jwt_token: str
+    layout: str = "presenter"
+
+class LayoutRequest(BaseModel):
+    passphrase: str
+    jwt_token: str
+    preset: str = "presenter"
+    uid: Optional[int] = None
+
+class JoinApprovalRequest(BaseModel):
+    passphrase: str
+    jwt_token: str
+    attendee_uid: int
+    approved: bool
+
+class ChurchRole(BaseModel):
+    name: str
+    external_id: str
+    permissions: List[dict]
+
 class ChurchVideoRoom(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     channel_name: str
