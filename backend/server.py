@@ -1560,13 +1560,223 @@ class StreamingPlatformConfig(BaseModel):
 class ChurchAgoraClient:
     def __init__(self):
         self.app_id = AGORA_APP_ID
-        self.app_certificate = AGORA_APP_CERTIFICATE
-        self.customer_id = AGORA_CUSTOMER_ID
-        self.customer_secret = AGORA_CUSTOMER_SECRET
-        self.base_url = "https://api.agora.io/v1"
+        self.api_key = AGORA_API_KEY  # Using RapidAPI key as the API key
+        self.project_id = AGORA_APP_ID  # Using app_id as project_id
+        self.base_url = "https://managedservices-prod.rteappbuilder.com"
         
+    def get_auth_headers(self):
+        """Get authentication headers for Managed Services API"""
+        return {
+            'X-API-KEY': self.api_key,
+            'X-Project-ID': self.project_id,
+            'Content-Type': 'application/json'
+        }
+    
+    def get_jwt_headers(self, token):
+        """Get JWT authentication headers"""
+        return {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+    
+    async def create_meeting_channel(self, group_id: str, title: str, enable_pstn: bool = True):
+        """Create a meeting channel for church group"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/channel",
+                    headers=self.get_auth_headers(),
+                    json={
+                        "title": f"{title} - Group {group_id}",
+                        "enable_pstn": enable_pstn
+                    }
+                )
+                
+                if response.status_code == 200:
+                    channel_data = response.json()
+                    return {
+                        "id": channel_data.get("id"),
+                        "channel_name": channel_data.get("channel"),
+                        "title": channel_data.get("title"),
+                        "host_passphrase": channel_data.get("host_pass_phrase"),
+                        "viewer_passphrase": channel_data.get("viewer_pass_phrase"),
+                        "pstn_number": channel_data.get("pstn", {}).get("number"),
+                        "pstn_dtmf": channel_data.get("pstn", {}).get("dtmf"),
+                        "created_at": datetime.now(timezone.utc)
+                    }
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"Failed to create channel: {response.text}")
+                    
+        except Exception as e:
+            logging.error(f"Channel creation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Channel creation failed: {str(e)}")
+    
+    async def join_channel(self, passphrase: str, jwt_token: str):
+        """Join a channel with JWT token"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/channel/join",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={"passphrase": passphrase}
+                )
+                
+                if response.status_code == 200:
+                    join_data = response.json()
+                    return {
+                        "channel_name": join_data.get("channel_name"),
+                        "is_host": join_data.get("is_host"),
+                        "main_user": join_data.get("main_user"),
+                        "screen_share_user": join_data.get("screen_share_user"),
+                        "chat_token": join_data.get("chat", {}).get("userToken"),
+                        "whiteboard_token": join_data.get("whiteboard", {}).get("room_token")
+                    }
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"Failed to join channel: {response.text}")
+                    
+        except Exception as e:
+            logging.error(f"Channel join failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Channel join failed: {str(e)}")
+    
+    async def share_channel_details(self, passphrase: str, jwt_token: str):
+        """Get shareable channel details"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/channel/share",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={"passphrase": passphrase}
+                )
+                
+                if response.status_code == 200:
+                    share_data = response.json()
+                    return {
+                        "host_passphrase": share_data.get("passphrases", {}).get("host"),
+                        "attendee_passphrase": share_data.get("passphrases", {}).get("attendee"),
+                        "channel_name": share_data.get("channel_name"),
+                        "title": share_data.get("title"),
+                        "pstn_number": share_data.get("pstn", {}).get("number"),
+                        "pstn_dtmf": share_data.get("pstn", {}).get("dtmf")
+                    }
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"Failed to share channel: {response.text}")
+                    
+        except Exception as e:
+            logging.error(f"Channel share failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Channel share failed: {str(e)}")
+    
+    async def start_recording(self, passphrase: str, jwt_token: str, layout: str = "presenter"):
+        """Start recording with church-appropriate layout"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/recording/start",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={
+                        "passphrase": passphrase,
+                        "layout": layout,
+                        "recordingConfig": {
+                            "maxIdleTime": 300,
+                            "subscribeVideoUids": ["#allstream#"],
+                            "subscribeAudioUids": ["#allstream#"]
+                        }
+                    }
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"Failed to start recording: {response.text}")
+                    
+        except Exception as e:
+            logging.error(f"Recording start failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Recording start failed: {str(e)}")
+    
+    async def stop_recording(self, passphrase: str, jwt_token: str):
+        """Stop recording"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/recording/stop",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={"passphrase": passphrase}
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"Failed to stop recording: {response.text}")
+                    
+        except Exception as e:
+            logging.error(f"Recording stop failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Recording stop failed: {str(e)}")
+    
+    async def set_recording_layout(self, passphrase: str, jwt_token: str, preset: str = "presenter", uid: int = None):
+        """Set recording layout for church services"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/recording/layout/update",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={
+                        "preset": preset,  # 'presenter', 'normal', or 'custom'
+                        "uid": uid,
+                        "passphrase": passphrase
+                    }
+                )
+                
+                return response.status_code == 200
+                    
+        except Exception as e:
+            logging.error(f"Layout update failed: {str(e)}")
+            return False
+    
+    async def request_join_channel(self, passphrase: str, jwt_token: str):
+        """Request to join channel (for approval system)"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/channel/join/request",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={
+                        "passphrase": passphrase,
+                        "send_event": True
+                    }
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"Failed to request join: {response.text}")
+                    
+        except Exception as e:
+            logging.error(f"Join request failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Join request failed: {str(e)}")
+    
+    async def approve_join_request(self, passphrase: str, jwt_token: str, attendee_uid: int, approved: bool):
+        """Approve or deny join request"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/channel/join/approval",
+                    headers=self.get_jwt_headers(jwt_token),
+                    json={
+                        "passphrase": passphrase,
+                        "attendee_uid": attendee_uid,
+                        "attendee_screenshare_uid": attendee_uid + 1,
+                        "approved": approved
+                    }
+                )
+                
+                return response.status_code == 200
+                    
+        except Exception as e:
+            logging.error(f"Join approval failed: {str(e)}")
+            return False
+    
+    # Keep the original token generation for backward compatibility
     def generate_rtc_token(self, channel_name: str, uid: int, role: str, expire_time: int = 3600) -> str:
-        """Generate Agora RTC token for video access"""
+        """Generate Agora RTC token for video access (legacy method for backward compatibility)"""
         try:
             from agora_token_builder import RtcTokenBuilder
             
@@ -1583,7 +1793,7 @@ class ChurchAgoraClient:
             # Generate token
             token = RtcTokenBuilder.buildTokenWithUid(
                 self.app_id,
-                self.app_certificate,
+                self.app_certificate if hasattr(self, 'app_certificate') and self.app_certificate else "",
                 channel_name,
                 uid,
                 role_type,
@@ -1592,154 +1802,8 @@ class ChurchAgoraClient:
             
             return token
         except Exception as e:
-            logging.error(f"Agora token generation failed: {str(e)}")
+            logging.error(f"Legacy token generation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
-    
-    def get_auth_header(self) -> str:
-        """Generate basic auth header for Agora API"""
-        import base64
-        credential = f"{self.customer_id}:{self.customer_secret}"
-        encoded_credential = base64.b64encode(credential.encode()).decode()
-        return f"Basic {encoded_credential}"
-    
-    async def start_cloud_recording(self, channel_name: str, uid: int, recording_config: dict):
-        """Start Agora cloud recording"""
-        try:
-            # Step 1: Acquire resource
-            acquire_payload = {
-                "cname": channel_name,
-                "uid": str(uid),
-                "clientRequest": {
-                    "resourceExpiredHour": 24,
-                    "scene": 0  # RTC channel
-                }
-            }
-            
-            async with httpx.AsyncClient() as client:
-                acquire_response = await client.post(
-                    f"{self.base_url}/apps/{self.app_id}/cloud_recording/acquire",
-                    headers={
-                        "Authorization": self.get_auth_header(),
-                        "Content-Type": "application/json"
-                    },
-                    json=acquire_payload,
-                    timeout=30.0
-                )
-                
-                if acquire_response.status_code != 200:
-                    raise HTTPException(status_code=500, detail="Failed to acquire recording resource")
-                
-                resource_id = acquire_response.json()["resourceId"]
-                
-                # Step 2: Start recording
-                recording_token = self.generate_rtc_token(channel_name, uid, 'host', 7200)
-                
-                start_payload = {
-                    "cname": channel_name,
-                    "uid": str(uid),
-                    "clientRequest": {
-                        "token": recording_token,
-                        "storageConfig": {
-                            "vendor": 1,  # AWS S3
-                            "region": 1,  # US_EAST_1
-                            "bucket": os.environ.get("AWS_BUCKET_NAME", "church-recordings"),
-                            "accessKey": os.environ.get("AWS_ACCESS_KEY_ID"),
-                            "secretKey": os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                            "fileNamePrefix": [
-                                "church-recordings",
-                                channel_name,
-                                str(int(datetime.now().timestamp()))
-                            ]
-                        },
-                        "recordingConfig": recording_config,
-                        "recordingFileConfig": {
-                            "avFileType": ["hls", "mp4"]
-                        }
-                    }
-                }
-                
-                start_response = await client.post(
-                    f"{self.base_url}/apps/{self.app_id}/cloud_recording/resourceid/{resource_id}/mode/composite/start",
-                    headers={
-                        "Authorization": self.get_auth_header(),
-                        "Content-Type": "application/json"
-                    },
-                    json=start_payload,
-                    timeout=30.0
-                )
-                
-                if start_response.status_code == 200:
-                    recording_data = start_response.json()
-                    return {
-                        "resource_id": resource_id,
-                        "sid": recording_data["sid"]
-                    }
-                else:
-                    raise HTTPException(status_code=500, detail="Failed to start recording")
-                    
-        except Exception as e:
-            logging.error(f"Cloud recording failed: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Recording failed: {str(e)}")
-    
-    async def start_rtmp_streaming(self, channel_name: str, uid: int, streaming_configs: List[dict]):
-        """Start RTMP streaming to multiple platforms"""
-        try:
-            streaming_sessions = {}
-            
-            for config in streaming_configs:
-                platform = config["platform"]
-                rtmp_url = f"{config['rtmp_url']}{config['stream_key']}"
-                
-                streaming_payload = {
-                    "cname": channel_name,
-                    "uid": str(uid),
-                    "clientRequest": {
-                        "publishUrl": rtmp_url,
-                        "rawStreamUrl": rtmp_url,
-                        "transcodingConfig": {
-                            "width": 1920,
-                            "height": 1080,
-                            "videoBitrate": 4000,
-                            "videoFramerate": 30,
-                            "audioSampleRate": 48000,
-                            "audioBitrate": 128,
-                            "audioChannels": 2,
-                            "backgroundColor": "#000000",
-                            "layoutConfig": [
-                                {
-                                    "uid": "1",  # Main speaker
-                                    "x_axis": 0.0,
-                                    "y_axis": 0.0,
-                                    "width": 1.0,
-                                    "height": 0.8,
-                                    "alpha": 1.0,
-                                    "render_mode": 1
-                                }
-                            ]
-                        }
-                    }
-                }
-                
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.base_url}/apps/{self.app_id}/rtmp/streamers",
-                        headers={
-                            "Authorization": self.get_auth_header(),
-                            "Content-Type": "application/json"
-                        },
-                        json=streaming_payload,
-                        timeout=30.0
-                    )
-                    
-                    if response.status_code == 200:
-                        stream_data = response.json()
-                        streaming_sessions[platform] = stream_data["streamId"]
-            
-            return streaming_sessions
-            
-        except Exception as e:
-            logging.error(f"RTMP streaming failed: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Streaming failed: {str(e)}")
 
 # Initialize Agora client
 agora_client = ChurchAgoraClient()
