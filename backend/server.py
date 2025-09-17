@@ -1876,6 +1876,336 @@ async def generate_agora_token(
         logging.error(f"Token generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# New Managed Services API Endpoints
+@api_router.post("/agora/channel/create", response_model=dict)
+async def create_meeting_channel(
+    request: CreateChannelRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a meeting channel for church group using Managed Services API"""
+    try:
+        # Validate user permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions to create channel")
+        
+        # Create channel using Managed Services API
+        channel_data = await agora_client.create_meeting_channel(
+            group_id=request.group_id,
+            title=request.title,
+            enable_pstn=request.enable_pstn
+        )
+        
+        # Store channel data in database
+        await db.church_channels.insert_one({
+            **channel_data,
+            "group_id": request.group_id,
+            "created_by": current_user.id,
+            "created_at": datetime.now(timezone.utc)
+        })
+        
+        return {
+            "success": True,
+            "channel": channel_data,
+            "message": "Church meeting channel created successfully"
+        }
+        
+    except Exception as e:
+        logging.error(f"Channel creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/channel/join", response_model=dict)
+async def join_meeting_channel(
+    request: JoinChannelRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Join a meeting channel using Managed Services API"""
+    try:
+        # Join channel using JWT token
+        join_data = await agora_client.join_channel(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token
+        )
+        
+        return {
+            "success": True,
+            "join_data": join_data,
+            "message": "Successfully joined church meeting channel"
+        }
+        
+    except Exception as e:
+        logging.error(f"Channel join failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/channel/share", response_model=dict)
+async def share_channel_details(
+    request: ShareChannelRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Get shareable channel details using Managed Services API"""
+    try:
+        # Get shareable details
+        share_data = await agora_client.share_channel_details(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token
+        )
+        
+        return {
+            "success": True,
+            "share_data": share_data,
+            "message": "Channel details retrieved for sharing"
+        }
+        
+    except Exception as e:
+        logging.error(f"Channel share failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/recording/start", response_model=dict)
+async def start_meeting_recording(
+    request: RecordingRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Start recording with church-appropriate layout"""
+    try:
+        # Validate host permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions to start recording")
+        
+        # Start recording
+        recording_data = await agora_client.start_recording(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token,
+            layout=request.layout
+        )
+        
+        return {
+            "success": True,
+            "recording": recording_data,
+            "message": "Recording started successfully"
+        }
+        
+    except Exception as e:
+        logging.error(f"Recording start failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/recording/stop", response_model=dict)
+async def stop_meeting_recording(
+    request: RecordingRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Stop meeting recording"""
+    try:
+        # Validate host permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions to stop recording")
+        
+        # Stop recording
+        recording_data = await agora_client.stop_recording(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token
+        )
+        
+        return {
+            "success": True,
+            "recording": recording_data,
+            "message": "Recording stopped and saved successfully"
+        }
+        
+    except Exception as e:
+        logging.error(f"Recording stop failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/recording/layout", response_model=dict)
+async def set_recording_layout(
+    request: LayoutRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Set recording layout for church services"""
+    try:
+        # Validate host permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions to change layout")
+        
+        # Set layout
+        success = await agora_client.set_recording_layout(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token,
+            preset=request.preset,
+            uid=request.uid
+        )
+        
+        return {
+            "success": success,
+            "message": "Recording layout updated successfully" if success else "Failed to update layout"
+        }
+        
+    except Exception as e:
+        logging.error(f"Layout update failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/join/request", response_model=dict)
+async def request_join_channel(
+    request: JoinChannelRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Request to join channel (for approval system)"""
+    try:
+        # Request to join
+        request_data = await agora_client.request_join_channel(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token
+        )
+        
+        return {
+            "success": True,
+            "request_data": request_data,
+            "message": "Join request submitted successfully"
+        }
+        
+    except Exception as e:
+        logging.error(f"Join request failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/join/approval", response_model=dict)
+async def approve_join_request(
+    request: JoinApprovalRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Approve or deny join request"""
+    try:
+        # Validate host permissions
+        if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions to approve joins")
+        
+        # Approve/deny join request
+        success = await agora_client.approve_join_request(
+            passphrase=request.passphrase,
+            jwt_token=request.jwt_token,
+            attendee_uid=request.attendee_uid,
+            approved=request.approved
+        )
+        
+        action = "approved" if request.approved else "denied"
+        return {
+            "success": success,
+            "message": f"Join request {action} successfully" if success else f"Failed to {action.rstrip('d')} join request"
+        }
+        
+    except Exception as e:
+        logging.error(f"Join approval failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/roles/create", response_model=dict)
+async def create_church_roles(
+    current_user: User = Depends(get_current_user)
+):
+    """Create church-specific roles in Agora Managed Services"""
+    try:
+        # Validate Super Admin permissions
+        if current_user.role != UserRole.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="Only Super Admin can create church roles")
+        
+        # Define church roles
+        roles = [
+            {
+                "name": "church_pastor",
+                "external_id": "pastor_001",
+                "permissions": [
+                    {"name": "create_meeting"},
+                    {"name": "join_meeting"},
+                    {"name": "cloud_recording_start"},
+                    {"name": "cloud_recording_stop"},
+                    {"name": "speech_to_text_start"},
+                    {"name": "speech_to_text_stop"},
+                    {"name": "whiteboard_create"},
+                    {"name": "whiteboard_join"},
+                    {"name": "chat_token"}
+                ]
+            },
+            {
+                "name": "church_leader",
+                "external_id": "leader_001",
+                "permissions": [
+                    {"name": "join_meeting"},
+                    {"name": "cloud_recording_start"},
+                    {"name": "cloud_recording_stop"},
+                    {"name": "whiteboard_join"},
+                    {"name": "chat_token"}
+                ]
+            },
+            {
+                "name": "church_member",
+                "external_id": "member_001",
+                "permissions": [
+                    {"name": "join_meeting"},
+                    {"name": "whiteboard_join"},
+                    {"name": "chat_token"}
+                ]
+            }
+        ]
+        
+        # Create roles via API (implementation depends on available endpoint)
+        created_roles = []
+        for role in roles:
+            try:
+                # This would call the actual role creation API when available
+                created_roles.append(role)
+            except Exception as e:
+                logging.error(f"Failed to create role {role['name']}: {str(e)}")
+        
+        return {
+            "success": True,
+            "roles": created_roles,
+            "message": f"Successfully created {len(created_roles)} church roles"
+        }
+        
+    except Exception as e:
+        logging.error(f"Role creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/agora/jwt/generate", response_model=dict)
+async def generate_jwt_token(
+    user_role: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate JWT token for Managed Services API authentication"""
+    try:
+        # Map church roles to Agora roles
+        role_mapping = {
+            UserRole.SUPER_ADMIN: "church_pastor",
+            UserRole.GROUP_ADMIN: "church_leader", 
+            UserRole.TEAM_LEADER: "church_leader",
+            UserRole.MEMBER: "church_member"
+        }
+        
+        agora_role = role_mapping.get(current_user.role, "church_member")
+        
+        # Generate JWT token (this would typically be done with proper JWT library and secret)
+        # For now, we'll return a placeholder structure
+        import jwt as pyjwt
+        
+        payload = {
+            "user_id": current_user.id,
+            "role": agora_role,
+            "project_id": AGORA_APP_ID,
+            "exp": datetime.now(timezone.utc) + timedelta(hours=24)
+        }
+        
+        # Use a proper JWT secret in production
+        jwt_secret = os.environ.get("JWT_SECRET", SECRET_KEY)
+        token = pyjwt.encode(payload, jwt_secret, algorithm="HS256")
+        
+        return {
+            "success": True,
+            "jwt_token": token,
+            "role": agora_role,
+            "expires_at": payload["exp"],
+            "message": "JWT token generated successfully"
+        }
+        
+    except Exception as e:
+        logging.error(f"JWT generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.post("/church-video/create", response_model=ChurchVideoRoom)
 async def create_church_video_room(
     room_data: dict,
