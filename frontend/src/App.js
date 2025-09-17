@@ -968,6 +968,7 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showGroupDetail, setShowGroupDetail] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, group: null, confirmText: '' });
   
   const [newGroup, setNewGroup] = useState({
     name: '',
@@ -985,14 +986,25 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
     setLoading(true);
     
     try {
+      // Validate form data
+      if (!newGroup.name.trim()) {
+        throw new Error('Group name is required');
+      }
+      
+      if (!newGroup.description.trim()) {
+        throw new Error('Group description is required');
+      }
+      
       const groupData = {
         ...newGroup,
+        name: newGroup.name.trim(),
+        description: newGroup.description.trim(),
         max_members: newGroup.max_members ? parseInt(newGroup.max_members) : null,
         tags: newGroup.tags.filter(tag => tag.trim())
       };
       
-      await axios.post(`${API}/groups`, groupData);
-      setMessage({ type: 'success', text: 'Group created successfully!' });
+      const response = await axios.post(`${API}/groups`, groupData);
+      setMessage({ type: 'success', text: `Group "${groupData.name}" created successfully!` });
       setNewGroup({
         name: '',
         description: '',
@@ -1006,31 +1018,129 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
       setShowCreateForm(false);
       onUpdate();
     } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create group' });
+      console.error('Group creation error:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.message || error.response?.data?.detail || 'Failed to create group' 
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteGroup = async (groupId, groupName) => {
-    if (window.confirm(`Are you sure you want to delete "${groupName}"? This action cannot be undone.`)) {
-      try {
-        await axios.delete(`${API}/groups/${groupId}`);
-        setMessage({ type: 'success', text: 'Group deleted successfully!' });
-        onUpdate();
-      } catch (error) {
-        setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to delete group' });
-      }
+  const handleDeleteGroup = (group) => {
+    setDeleteConfirmation({ show: true, group, confirmText: '' });
+  };
+
+  const confirmDeleteGroup = async () => {
+    const { group } = deleteConfirmation;
+    
+    if (deleteConfirmation.confirmText !== 'DELETE') {
+      setMessage({ type: 'error', text: 'Please type DELETE to confirm deletion' });
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await axios.delete(`${API}/groups/${group.id}`);
+      setMessage({ 
+        type: 'success', 
+        text: `Group "${group.name}" has been deleted successfully!` 
+      });
+      setDeleteConfirmation({ show: false, group: null, confirmText: '' });
+      onUpdate();
+    } catch (error) {
+      console.error('Group deletion error:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to delete group' 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const openGroupDetail = async (group) => {
     try {
+      setLoading(true);
       const response = await axios.get(`${API}/groups/${group.id}`);
       setSelectedGroup(response.data);
       setShowGroupDetail(true);
     } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to load group details' });
+      console.error('Failed to load group details:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to load group details. Please try again.' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startGroupVideoMeeting = async (group) => {
+    try {
+      setLoading(true);
+      
+      // Create church video room for the group
+      const roomData = {
+        room_name: `${group.name} Group Meeting`,
+        service_type: 'group_meeting',
+        max_participants: Math.min(group.max_members || 200, 1000),
+        enable_recording: true,
+        enable_streaming: false,
+        group_id: group.id
+      };
+      
+      const response = await axios.post(`${API}/church-video/create`, roomData);
+      
+      // Generate Agora token for the user
+      const tokenResponse = await axios.post(`${API}/agora/token`, {
+        channel_name: response.data.channel_name,
+        uid: Math.floor(Math.random() * 10000) + 1000,
+        role: 'host',
+        expire_time: 7200
+      });
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Video meeting started for ${group.name}! Room: ${response.data.channel_name}` 
+      });
+      
+      // You could redirect to video meeting or show in modal
+      // For now, we'll just show success message
+      
+    } catch (error) {
+      console.error('Video meeting creation failed:', error);
+      
+      // Handle specific Agora error codes
+      if (error.response?.status === 601) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Video service configuration error. Please contact administrator.' 
+        });
+      } else if (error.response?.status === 602 || error.response?.status === 604) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Authentication failed. Please refresh the page and try again.' 
+        });
+      } else if (error.response?.status === 606) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Video conferencing feature not available. Please contact administrator.' 
+        });
+      } else if (error.response?.status === 611) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Invalid meeting request. Please check group settings and try again.' 
+        });
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: error.response?.data?.detail || 'Failed to start video meeting. Please try again.' 
+        });
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1039,7 +1149,7 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Group Management</h2>
-          <p className="text-gray-600">Create and manage all groups</p>
+          <p className="text-gray-600">Create and manage all church groups and communities</p>
         </div>
         <button
           onClick={() => setShowCreateForm(true)}
@@ -1052,14 +1162,14 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
         </button>
       </div>
 
-      {/* Create Group Form */}
+      {/* Enhanced Create Group Form */}
       {showCreateForm && (
         <div className="bg-white rounded-2xl shadow-lg p-6 border">
           <h3 className="text-xl font-bold mb-6">Create New Group</h3>
           <form onSubmit={handleCreateGroup} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Group Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Group Name *</label>
                 <input
                   type="text"
                   value={newGroup.name}
@@ -1089,11 +1199,12 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
               <textarea
                 value={newGroup.description}
                 onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
                 rows={4}
+                required
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 placeholder="Describe the purpose and goals of this group"
               />
@@ -1107,9 +1218,9 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
                   onChange={(e) => setNewGroup({ ...newGroup, privacy_setting: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 >
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
-                  <option value="invite_only">Invite Only</option>
+                  <option value="public">Public - Anyone can join</option>
+                  <option value="private">Private - Invite only</option>
+                  <option value="invite_only">Invite Only - Admin approval required</option>
                 </select>
               </div>
               <div>
@@ -1119,6 +1230,7 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
                   value={newGroup.max_members}
                   onChange={(e) => setNewGroup({ ...newGroup, max_members: e.target.value })}
                   min="1"
+                  max="1000"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   placeholder="Unlimited"
                 />
@@ -1165,13 +1277,13 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
         </div>
       )}
 
-      {/* Groups Grid */}
+      {/* Enhanced Groups Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {groups.length === 0 ? (
           <div className="col-span-full text-center py-12 bg-white rounded-2xl shadow-lg">
             <div className="text-6xl mb-4">🫂</div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">No Groups Created</h3>
-            <p className="text-gray-600 mb-6">Get started by creating your first group</p>
+            <p className="text-gray-600 mb-6">Get started by creating your first group to build community</p>
             <button
               onClick={() => setShowCreateForm(true)}
               className="bg-purple-500 text-white px-6 py-3 rounded-xl hover:bg-purple-600 transition-colors"
@@ -1228,18 +1340,29 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
                 )}
               </div>
               
-              <div className="flex space-x-2">
+              {/* Enhanced Action Buttons */}
+              <div className="space-y-2">
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => openGroupDetail(group)}
+                    disabled={loading}
+                    className="flex-1 bg-purple-50 text-purple-600 px-3 py-2 rounded-lg text-sm hover:bg-purple-100 transition-colors font-medium disabled:opacity-50"
+                  >
+                    {loading ? 'Loading...' : 'View Details'}
+                  </button>
+                  <button
+                    onClick={() => startGroupVideoMeeting(group)}
+                    disabled={loading}
+                    className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
+                  >
+                    📹 Meet
+                  </button>
+                </div>
                 <button
-                  onClick={() => openGroupDetail(group)}
-                  className="flex-1 bg-purple-50 text-purple-600 px-3 py-2 rounded-lg text-sm hover:bg-purple-100 transition-colors font-medium"
+                  onClick={() => handleDeleteGroup(group)}
+                  className="w-full bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium"
                 >
-                  View Details
-                </button>
-                <button
-                  onClick={() => handleDeleteGroup(group.id, group.name)}
-                  className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium"
-                >
-                  Delete
+                  Delete Group
                 </button>
               </div>
             </div>
@@ -1247,9 +1370,68 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
         )}
       </div>
 
-      {/* Group Detail Modal */}
+      {/* Enhanced Delete Confirmation Modal */}
+      {deleteConfirmation.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Group</h3>
+              <p className="text-gray-600">
+                Are you sure you want to delete "<strong>{deleteConfirmation.group?.name}</strong>"?
+              </p>
+            </div>
+            
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <h4 className="font-semibold text-red-800 mb-2">This action will:</h4>
+              <ul className="text-sm text-red-700 space-y-1">
+                <li>• Remove all group members</li>
+                <li>• Delete group history and data</li>
+                <li>• Cancel scheduled meetings</li>
+                <li>• Cannot be undone</li>
+              </ul>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Type <strong>DELETE</strong> to confirm:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmation.confirmText}
+                onChange={(e) => setDeleteConfirmation({ 
+                  ...deleteConfirmation, 
+                  confirmText: e.target.value 
+                })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="Type DELETE"
+              />
+            </div>
+            
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setDeleteConfirmation({ show: false, group: null, confirmText: '' })}
+                className="flex-1 bg-gray-300 text-gray-700 px-4 py-3 rounded-xl hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteGroup}
+                disabled={loading || deleteConfirmation.confirmText !== 'DELETE'}
+                className="flex-1 bg-red-500 text-white px-4 py-3 rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                {loading ? 'Deleting...' : 'Delete Group'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Group Detail Modal */}
       {showGroupDetail && selectedGroup && (
-        <GroupDetailModal 
+        <EnhancedGroupDetailModal 
           group={selectedGroup}
           users={users}
           API={API}
