@@ -496,6 +496,12 @@ const SuperAdminDashboard = () => {
     if (activeTab === 'users') fetchUsers();
     if (activeTab === 'admin-requests') fetchAdminRequests();
     if (activeTab === 'access-codes') fetchAccessCodes();
+    if (activeTab === 'groups') fetchGroups();
+    if (activeTab === 'training') fetchTrainingVideos();
+    if (activeTab === 'meetings') fetchMeetings();
+    if (activeTab === 'finances') fetchDonationStats();
+    if (activeTab === 'analytics') fetchAnalytics();
+    if (activeTab === 'activities') fetchActivities();
   }, [activeTab]);
 
   const fetchUsers = async () => {
