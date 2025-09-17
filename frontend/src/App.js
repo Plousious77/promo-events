@@ -2609,6 +2609,20 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     fetchChurchVideoRooms();
   }, []);
 
+  // Add safety check for user availability
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading user profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const fetchChurchVideoRooms = async () => {
     try {
       const response = await axios.get(`${API}/church-video/rooms`);
