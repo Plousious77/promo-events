@@ -231,6 +231,128 @@ class AccessCode(BaseModel):
     used_by: Optional[str] = None
     is_active: bool = True
 
+# Enhanced Models for Admin Dashboard
+class GroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    group_type: str = GroupType.MINISTRY
+    privacy_setting: str = "public"  # public, private, invite_only
+    max_members: Optional[int] = None
+    meeting_schedule: Optional[str] = None
+
+class Group(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: Optional[str] = None
+    group_type: str
+    privacy_setting: str = "public"
+    max_members: Optional[int] = None
+    meeting_schedule: Optional[str] = None
+    admin_id: str
+    members: List[str] = []
+    leaders: List[str] = []
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+
+class TrainingVideo(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: Optional[str] = None
+    category: str = VideoCategory.GENERAL
+    file_path: str
+    duration: Optional[int] = None  # in seconds
+    mandatory: bool = False
+    target_roles: List[str] = []  # roles that should watch this video
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+
+class VideoProgress(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    video_id: str
+    progress_percentage: float = 0.0
+    completed: bool = False
+    last_watched: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class Meeting(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: Optional[str] = None
+    meeting_type: str = MeetingType.ADMIN
+    scheduled_date: datetime
+    duration_minutes: int = 60
+    location: Optional[str] = None
+    zoom_link: Optional[str] = None
+    agenda: Optional[str] = None
+    organizer_id: str
+    attendees: List[str] = []
+    required_attendees: List[str] = []
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_recurring: bool = False
+    recurrence_pattern: Optional[str] = None
+
+class Donation(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: Optional[str] = None
+    amount: float
+    currency: str = "USD"
+    category: str = "General Fund"
+    payment_method: str = "PayPal"
+    transaction_id: Optional[str] = None
+    donor_name: Optional[str] = None
+    donor_email: Optional[str] = None
+    message: Optional[str] = None
+    is_anonymous: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    status: str = "completed"
+
+class SystemActivity(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    action: str
+    target_type: str  # user, group, system, etc.
+    target_id: Optional[str] = None
+    details: Dict[str, Any] = {}
+    ip_address: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Request Models
+class BulkUserAction(BaseModel):
+    user_ids: List[str]
+    action: str  # activate, deactivate, reset_password, change_role
+    value: Optional[str] = None  # for change_role action
+
+class PasswordResetRequest(BaseModel):
+    user_id: str
+    send_email: bool = True
+
+class GroupMembershipUpdate(BaseModel):
+    group_id: str
+    user_ids: List[str]
+    action: str  # add, remove
+    role: str = "member"  # member, leader
+
+class TrainingVideoCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: str = VideoCategory.GENERAL
+    mandatory: bool = False
+    target_roles: List[str] = []
+
+class MeetingCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    meeting_type: str = MeetingType.ADMIN
+    scheduled_date: datetime
+    duration_minutes: int = 60
+    location: Optional[str] = None
+    agenda: Optional[str] = None
+    attendees: List[str] = []
+    required_attendees: List[str] = []
+    is_recurring: bool = False
+    recurrence_pattern: Optional[str] = None
+
 # Helper Functions
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
