@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, BackgroundTasks, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -14,9 +14,7 @@ import uuid
 import secrets
 import string
 import re
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import shutil
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
@@ -41,7 +39,7 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
-app = FastAPI(title="Glory of Elshaddai Christian Center Connect - Authentication System")
+app = FastAPI(title="Glory of Elshaddai Christian Center Connect - Production System")
 api_router = APIRouter(prefix="/api")
 
 # User Roles
@@ -71,22 +69,25 @@ class GroupType:
     SERVICE_TEAM = "Service Team"
     LEADERSHIP_CIRCLE = "Leadership Circle"
     INTEREST_GROUP = "Interest Group"
+    BIBLE_STUDY = "Bible Study"
+    WORSHIP_TEAM = "Worship Team"
+    OUTREACH_TEAM = "Outreach Team"
 
-# Training Video Categories
-class VideoCategory:
-    NEW_USER = "New User"
-    ADMIN_TRAINING = "Admin Training"
-    LEADERSHIP = "Leadership"
-    TECHNICAL = "Technical"
-    GENERAL = "General"
+# Group Privacy Settings
+class PrivacySetting:
+    PUBLIC = "public"
+    PRIVATE = "private"
+    INVITE_ONLY = "invite_only"
 
 # Meeting Types
 class MeetingType:
-    ADMIN = "Admin"
-    MINISTRY = "Ministry"
-    LEADERSHIP = "Leadership"
-    ALL_HANDS = "All-Hands"
-    EMERGENCY = "Emergency"
+    REGULAR = "Regular"
+    SPECIAL_EVENT = "Special Event"
+    BIBLE_STUDY = "Bible Study"
+    PRAYER_MEETING = "Prayer Meeting"
+    WORSHIP_SERVICE = "Worship Service"
+    YOUTH_MEETING = "Youth Meeting"
+    LEADERSHIP_MEETING = "Leadership Meeting"
 
 # Pydantic Models
 class UserRegistration(BaseModel):
@@ -144,6 +145,14 @@ class PasswordChange(BaseModel):
             raise ValueError('Passwords do not match')
         return v
 
+class SuperAdminProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    time_zone: Optional[str] = None
+    language: Optional[str] = None
+
 class AdminRequest(BaseModel):
     full_name: str
     email: EmailStr
@@ -176,11 +185,16 @@ class User(BaseModel):
     role: str = UserRole.MEMBER
     status: str = AccountStatus.PENDING_VERIFICATION
     profile_picture: Optional[str] = None
+    bio: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    time_zone: str = "UTC"
+    language: str = "en"
     points: int = 0
     coins: int = 0
     failed_login_attempts: int = 0
     last_failed_login: Optional[datetime] = None
     email_verified: bool = False
+    two_factor_enabled: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login: Optional[datetime] = None
@@ -193,9 +207,13 @@ class UserResponse(BaseModel):
     role: str
     status: str
     profile_picture: Optional[str] = None
+    bio: Optional[str] = None
+    time_zone: str
+    language: str
     points: int
     coins: int
     email_verified: bool
+    two_factor_enabled: bool
     created_at: datetime
     last_login: Optional[datetime] = None
 
@@ -231,87 +249,104 @@ class AccessCode(BaseModel):
     used_by: Optional[str] = None
     is_active: bool = True
 
-# Enhanced Models for Admin Dashboard
+# Enhanced Group Models
+class GroupSchedule(BaseModel):
+    day_of_week: int  # 0=Monday, 6=Sunday
+    start_time: str  # HH:MM format
+    end_time: str  # HH:MM format
+    is_active: bool = True
+
 class GroupCreate(BaseModel):
     name: str
     description: Optional[str] = None
     group_type: str = GroupType.MINISTRY
-    privacy_setting: str = "public"  # public, private, invite_only
+    privacy_setting: str = PrivacySetting.PUBLIC
     max_members: Optional[int] = None
-    meeting_schedule: Optional[str] = None
+    color_theme: str = "#6366f1"  # Default indigo
+    image_url: Optional[str] = None
+    meeting_location: Optional[str] = None
+    usage_hours: List[GroupSchedule] = []
+    tags: List[str] = []
 
 class Group(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: Optional[str] = None
     group_type: str
-    privacy_setting: str = "public"
+    privacy_setting: str = PrivacySetting.PUBLIC
     max_members: Optional[int] = None
-    meeting_schedule: Optional[str] = None
+    color_theme: str = "#6366f1"
+    image_url: Optional[str] = None
+    meeting_location: Optional[str] = None
+    usage_hours: List[GroupSchedule] = []
+    tags: List[str] = []
     admin_id: str
     members: List[str] = []
     leaders: List[str] = []
+    moderators: List[str] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
+    member_count: int = 0
+    last_activity: Optional[datetime] = None
 
-class TrainingVideo(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    group_type: Optional[str] = None
+    privacy_setting: Optional[str] = None
+    max_members: Optional[int] = None
+    color_theme: Optional[str] = None
+    image_url: Optional[str] = None
+    meeting_location: Optional[str] = None
+    usage_hours: Optional[List[GroupSchedule]] = None
+    tags: Optional[List[str]] = None
+
+class MeetingCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    category: str = VideoCategory.GENERAL
-    file_path: str
-    duration: Optional[int] = None  # in seconds
-    mandatory: bool = False
-    target_roles: List[str] = []  # roles that should watch this video
-    created_by: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    is_active: bool = True
-
-class VideoProgress(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: str
-    video_id: str
-    progress_percentage: float = 0.0
-    completed: bool = False
-    last_watched: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    group_id: str
+    meeting_type: str = MeetingType.REGULAR
+    scheduled_date: datetime
+    duration_minutes: int = 60
+    location: Optional[str] = None
+    virtual_link: Optional[str] = None
+    agenda: Optional[str] = None
+    attendees: List[str] = []
+    required_attendees: List[str] = []
+    is_recurring: bool = False
+    recurrence_pattern: Optional[str] = None
+    max_participants: Optional[int] = None
 
 class Meeting(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
     description: Optional[str] = None
-    meeting_type: str = MeetingType.ADMIN
+    group_id: str
+    meeting_type: str
     scheduled_date: datetime
     duration_minutes: int = 60
     location: Optional[str] = None
-    zoom_link: Optional[str] = None
+    virtual_link: Optional[str] = None
     agenda: Optional[str] = None
     organizer_id: str
     attendees: List[str] = []
     required_attendees: List[str] = []
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    actual_attendees: List[str] = []
     is_recurring: bool = False
     recurrence_pattern: Optional[str] = None
-
-class Donation(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: Optional[str] = None
-    amount: float
-    currency: str = "USD"
-    category: str = "General Fund"
-    payment_method: str = "PayPal"
-    transaction_id: Optional[str] = None
-    donor_name: Optional[str] = None
-    donor_email: Optional[str] = None
-    message: Optional[str] = None
-    is_anonymous: bool = False
+    max_participants: Optional[int] = None
+    status: str = "scheduled"  # scheduled, in_progress, completed, cancelled
+    recording_url: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    status: str = "completed"
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
 
 class SystemActivity(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
     action: str
-    target_type: str  # user, group, system, etc.
+    target_type: str  # user, group, meeting, system, etc.
     target_id: Optional[str] = None
     details: Dict[str, Any] = {}
     ip_address: Optional[str] = None
@@ -323,35 +358,10 @@ class BulkUserAction(BaseModel):
     action: str  # activate, deactivate, reset_password, change_role
     value: Optional[str] = None  # for change_role action
 
-class PasswordResetRequest(BaseModel):
-    user_id: str
-    send_email: bool = True
-
 class GroupMembershipUpdate(BaseModel):
-    group_id: str
     user_ids: List[str]
-    action: str  # add, remove
-    role: str = "member"  # member, leader
-
-class TrainingVideoCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-    category: str = VideoCategory.GENERAL
-    mandatory: bool = False
-    target_roles: List[str] = []
-
-class MeetingCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-    meeting_type: str = MeetingType.ADMIN
-    scheduled_date: datetime
-    duration_minutes: int = 60
-    location: Optional[str] = None
-    agenda: Optional[str] = None
-    attendees: List[str] = []
-    required_attendees: List[str] = []
-    is_recurring: bool = False
-    recurrence_pattern: Optional[str] = None
+    action: str  # add, remove, promote, demote
+    role: str = "member"  # member, leader, moderator
 
 # Helper Functions
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -373,21 +383,15 @@ def generate_verification_code() -> str:
 
 def generate_access_code(phone_last_four: str) -> str:
     """Generate a 4-digit access code using phone last 4 digits as base"""
-    # For now, return the last 4 digits. In production, you might want more complex logic
     return phone_last_four
 
 async def send_verification_email(email: str, code: str, name: str):
     """Send verification email (mock implementation)"""
     try:
-        # Mock email sending - in production, replace with real SMTP
         print(f"SENDING EMAIL TO: {email}")
         print(f"VERIFICATION CODE: {code}")
         print(f"RECIPIENT: {name}")
         print("=" * 50)
-        
-        # You can implement real email sending here later
-        # For now, we'll just log it so you can see the codes during testing
-        
         return True
     except Exception as e:
         logging.error(f"Failed to send email to {email}: {str(e)}")
@@ -436,20 +440,102 @@ def prepare_for_mongo(data):
         for key, value in data.items():
             if isinstance(value, datetime):
                 data[key] = value.isoformat()
+            elif isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, dict):
+                        value[i] = prepare_for_mongo(item)
     return data
 
 def parse_from_mongo(item):
     """Parse datetime strings back from MongoDB"""
     if isinstance(item, dict):
         datetime_fields = ['created_at', 'updated_at', 'last_login', 'last_failed_login', 
-                          'submitted_at', 'processed_at', 'expires_at', 'used_at']
+                          'submitted_at', 'processed_at', 'expires_at', 'used_at',
+                          'scheduled_date', 'started_at', 'ended_at', 'last_activity']
         for key, value in item.items():
             if key in datetime_fields and isinstance(value, str):
                 try:
                     item[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
                 except:
                     pass
+            elif isinstance(value, list):
+                for i, subitem in enumerate(value):
+                    if isinstance(subitem, dict):
+                        value[i] = parse_from_mongo(subitem)
     return item
+
+# System Management Routes
+@api_router.post("/system/clean-virgin-state")
+async def clean_virgin_state(current_user: User = Depends(get_super_admin)):
+    """Clean all data except super admin - create virgin app state"""
+    try:
+        # Keep only the super admin user
+        await db.users.delete_many({"role": {"$ne": UserRole.SUPER_ADMIN}})
+        
+        # Clear all other collections
+        await db.groups.delete_many({})
+        await db.meetings.delete_many({})
+        await db.admin_requests.delete_many({})
+        await db.access_codes.delete_many({})
+        await db.system_activities.delete_many({})
+        await db.email_verifications.delete_many({})
+        
+        # Log the cleanup activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="system_cleanup",
+            target_type="system",
+            details={"action": "virgin_state_cleanup", "timestamp": datetime.now(timezone.utc).isoformat()}
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {"message": "System cleaned to virgin state successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clean system: {str(e)}")
+
+@api_router.get("/system/stats")
+async def get_system_stats(current_user: User = Depends(get_super_admin)):
+    """Get comprehensive system statistics"""
+    try:
+        stats = {
+            "users": {
+                "total": await db.users.count_documents({}),
+                "active": await db.users.count_documents({"status": AccountStatus.ACTIVE}),
+                "super_admins": await db.users.count_documents({"role": UserRole.SUPER_ADMIN}),
+                "group_admins": await db.users.count_documents({"role": UserRole.GROUP_ADMIN}),
+                "team_leaders": await db.users.count_documents({"role": UserRole.TEAM_LEADER}),
+                "members": await db.users.count_documents({"role": UserRole.MEMBER})
+            },
+            "groups": {
+                "total": await db.groups.count_documents({"is_active": True}),
+                "by_type": {}
+            },
+            "meetings": {
+                "total": await db.meetings.count_documents({}),
+                "upcoming": await db.meetings.count_documents({
+                    "scheduled_date": {"$gte": datetime.now(timezone.utc).isoformat()},
+                    "status": "scheduled"
+                }),
+                "completed": await db.meetings.count_documents({"status": "completed"})
+            },
+            "activities": {
+                "recent": await db.system_activities.count_documents({
+                    "created_at": {"$gte": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()}
+                })
+            }
+        }
+        
+        # Group stats by type
+        for group_type in [GroupType.MINISTRY, GroupType.AGE_GROUP, GroupType.SERVICE_TEAM, 
+                          GroupType.LEADERSHIP_CIRCLE, GroupType.INTEREST_GROUP]:
+            stats["groups"]["by_type"][group_type] = await db.groups.count_documents({
+                "group_type": group_type,
+                "is_active": True
+            })
+        
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get system stats: {str(e)}")
 
 # Authentication Routes
 @api_router.post("/auth/register")
@@ -598,8 +684,8 @@ async def login(user_credentials: UserLogin):
         
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # Check if email is verified
-    if not user.get("email_verified", False):
+    # Check if email is verified (except for super admin)
+    if not user.get("email_verified", False) and user.get("role") != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=401, detail="Please verify your email before logging in")
     
     # Check account status
@@ -653,6 +739,312 @@ async def change_password(password_data: PasswordChange, current_user: User = De
     
     return {"message": "Password changed successfully"}
 
+# Super Admin Profile Management
+@api_router.put("/super-admin/profile")
+async def update_super_admin_profile(profile_data: SuperAdminProfileUpdate, current_user: User = Depends(get_super_admin)):
+    """Update super admin profile information"""
+    update_fields = {}
+    
+    for field, value in profile_data.dict(exclude_unset=True).items():
+        if value is not None:
+            update_fields[field] = value
+    
+    if update_fields:
+        update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        
+        await db.users.update_one(
+            {"id": current_user.id},
+            {"$set": update_fields}
+        )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="profile_update",
+            target_type="user",
+            target_id=current_user.id,
+            details={"updated_fields": list(update_fields.keys())}
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {"message": "Profile updated successfully"}
+
+# Enhanced Group Management Routes
+@api_router.post("/groups", response_model=Group)
+async def create_group(group_data: GroupCreate, current_user: User = Depends(get_super_admin)):
+    """Create a new group with enhanced features"""
+    group_dict = group_data.dict()
+    group_dict["admin_id"] = current_user.id
+    group_obj = Group(**group_dict)
+    
+    group_dict_for_db = prepare_for_mongo(group_obj.dict())
+    await db.groups.insert_one(group_dict_for_db)
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action="create_group",
+        target_type="group",
+        target_id=group_obj.id,
+        details={"group_name": group_obj.name, "group_type": group_obj.group_type}
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return group_obj
+
+@api_router.get("/groups", response_model=List[Group])
+async def get_all_groups(current_user: User = Depends(get_super_admin)):
+    """Get all groups for admin management"""
+    groups = await db.groups.find({"is_active": True}).sort("created_at", -1).to_list(1000)
+    
+    # Update member counts
+    for group in groups:
+        group["member_count"] = len(group.get("members", []))
+    
+    return [Group(**parse_from_mongo(group)) for group in groups]
+
+@api_router.get("/groups/{group_id}", response_model=Group)
+async def get_group_details(group_id: str, current_user: User = Depends(get_super_admin)):
+    """Get detailed group information"""
+    group = await db.groups.find_one({"id": group_id, "is_active": True})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    # Update member count
+    group["member_count"] = len(group.get("members", []))
+    
+    # Update last activity
+    last_meeting = await db.meetings.find_one(
+        {"group_id": group_id}, 
+        sort=[("scheduled_date", -1)]
+    )
+    if last_meeting:
+        group["last_activity"] = last_meeting.get("scheduled_date")
+    
+    return Group(**parse_from_mongo(group))
+
+@api_router.put("/groups/{group_id}")
+async def update_group(group_id: str, group_update: GroupUpdate, current_user: User = Depends(get_super_admin)):
+    """Update group information"""
+    group = await db.groups.find_one({"id": group_id, "is_active": True})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    update_fields = {}
+    for field, value in group_update.dict(exclude_unset=True).items():
+        if value is not None:
+            update_fields[field] = value
+    
+    if update_fields:
+        update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        
+        await db.groups.update_one(
+            {"id": group_id},
+            {"$set": prepare_for_mongo(update_fields)}
+        )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="update_group",
+            target_type="group",
+            target_id=group_id,
+            details={"updated_fields": list(update_fields.keys()), "group_name": group["name"]}
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {"message": "Group updated successfully"}
+
+@api_router.delete("/groups/{group_id}")
+async def delete_group(group_id: str, current_user: User = Depends(get_super_admin)):
+    """Delete a group (soft delete)"""
+    group = await db.groups.find_one({"id": group_id, "is_active": True})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    # Soft delete the group
+    await db.groups.update_one(
+        {"id": group_id},
+        {
+            "$set": {
+                "is_active": False,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Cancel all future meetings for this group
+    await db.meetings.update_many(
+        {
+            "group_id": group_id,
+            "scheduled_date": {"$gte": datetime.now(timezone.utc).isoformat()},
+            "status": "scheduled"
+        },
+        {"$set": {"status": "cancelled"}}
+    )
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action="delete_group",
+        target_type="group",
+        target_id=group_id,
+        details={"group_name": group["name"], "member_count": len(group.get("members", []))}
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {"message": "Group deleted successfully"}
+
+@api_router.put("/groups/{group_id}/members")
+async def update_group_membership(group_id: str, membership_data: GroupMembershipUpdate, current_user: User = Depends(get_super_admin)):
+    """Add, remove, or update members in a group"""
+    group = await db.groups.find_one({"id": group_id, "is_active": True})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    update_operations = {}
+    
+    if membership_data.action == "add":
+        # Add members
+        update_operations["$addToSet"] = {"members": {"$each": membership_data.user_ids}}
+        if membership_data.role == "leader":
+            update_operations["$addToSet"]["leaders"] = {"$each": membership_data.user_ids}
+        elif membership_data.role == "moderator":
+            update_operations["$addToSet"]["moderators"] = {"$each": membership_data.user_ids}
+        message = f"Added {len(membership_data.user_ids)} members to group"
+    
+    elif membership_data.action == "remove":
+        # Remove members from all roles
+        update_operations["$pullAll"] = {
+            "members": membership_data.user_ids,
+            "leaders": membership_data.user_ids,
+            "moderators": membership_data.user_ids
+        }
+        message = f"Removed {len(membership_data.user_ids)} members from group"
+    
+    elif membership_data.action == "promote":
+        # Promote to leader or moderator
+        if membership_data.role == "leader":
+            update_operations["$addToSet"] = {"leaders": {"$each": membership_data.user_ids}}
+        elif membership_data.role == "moderator":
+            update_operations["$addToSet"] = {"moderators": {"$each": membership_data.user_ids}}
+        message = f"Promoted {len(membership_data.user_ids)} members to {membership_data.role}"
+    
+    elif membership_data.action == "demote":
+        # Remove from leadership roles
+        update_operations["$pullAll"] = {
+            "leaders": membership_data.user_ids,
+            "moderators": membership_data.user_ids
+        }
+        message = f"Demoted {len(membership_data.user_ids)} members"
+    
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    
+    # Update the group
+    await db.groups.update_one({"id": group_id}, update_operations)
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action=f"group_membership_{membership_data.action}",
+        target_type="group",
+        target_id=group_id,
+        details={
+            "user_ids": membership_data.user_ids, 
+            "role": membership_data.role,
+            "group_name": group["name"]
+        }
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {"message": message}
+
+# Meeting Management Routes
+@api_router.post("/meetings", response_model=Meeting)
+async def create_meeting(meeting_data: MeetingCreate, current_user: User = Depends(get_super_admin)):
+    """Create a new meeting"""
+    # Verify group exists
+    group = await db.groups.find_one({"id": meeting_data.group_id, "is_active": True})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    meeting_dict = meeting_data.dict()
+    meeting_dict["organizer_id"] = current_user.id
+    meeting_obj = Meeting(**meeting_dict)
+    
+    meeting_dict_for_db = prepare_for_mongo(meeting_obj.dict())
+    await db.meetings.insert_one(meeting_dict_for_db)
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action="create_meeting",
+        target_type="meeting",
+        target_id=meeting_obj.id,
+        details={
+            "meeting_title": meeting_obj.title,
+            "group_name": group["name"],
+            "scheduled_date": meeting_obj.scheduled_date.isoformat()
+        }
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return meeting_obj
+
+@api_router.get("/meetings")
+async def get_meetings(group_id: Optional[str] = None, current_user: User = Depends(get_super_admin)):
+    """Get meetings, optionally filtered by group"""
+    query = {}
+    if group_id:
+        query["group_id"] = group_id
+    
+    meetings = await db.meetings.find(query).sort("scheduled_date", 1).to_list(1000)
+    return [Meeting(**parse_from_mongo(meeting)) for meeting in meetings]
+
+@api_router.get("/meetings/{meeting_id}")
+async def get_meeting_details(meeting_id: str, current_user: User = Depends(get_super_admin)):
+    """Get detailed meeting information"""
+    meeting = await db.meetings.find_one({"id": meeting_id})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    return Meeting(**parse_from_mongo(meeting))
+
+@api_router.put("/meetings/{meeting_id}/status")
+async def update_meeting_status(meeting_id: str, status_data: dict, current_user: User = Depends(get_super_admin)):
+    """Update meeting status"""
+    meeting = await db.meetings.find_one({"id": meeting_id})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    new_status = status_data.get("status")
+    allowed_statuses = ["scheduled", "in_progress", "completed", "cancelled"]
+    
+    if new_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    update_data = {"status": new_status}
+    
+    if new_status == "in_progress":
+        update_data["started_at"] = datetime.now(timezone.utc).isoformat()
+    elif new_status == "completed":
+        update_data["ended_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.meetings.update_one({"id": meeting_id}, {"$set": update_data})
+    
+    # Log the activity
+    activity = SystemActivity(
+        user_id=current_user.id,
+        action="update_meeting_status",
+        target_type="meeting",
+        target_id=meeting_id,
+        details={"new_status": new_status, "meeting_title": meeting["title"]}
+    )
+    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+    
+    return {"message": f"Meeting status updated to {new_status}"}
+
 # Admin Request Routes
 @api_router.post("/admin/request")
 async def submit_admin_request(request_data: AdminRequest, background_tasks: BackgroundTasks):
@@ -705,7 +1097,6 @@ async def submit_admin_request(request_data: AdminRequest, background_tasks: Bac
     
     return {"message": "Admin request submitted successfully. You will be notified once it's reviewed."}
 
-# Super Admin Routes
 @api_router.get("/admin/requests", response_model=List[AdminRequestModel])
 async def get_admin_requests(current_user: User = Depends(get_super_admin)):
     requests = await db.admin_requests.find().sort("submitted_at", -1).to_list(1000)
@@ -736,11 +1127,9 @@ async def approve_admin_request(request_id: str, approval_data: dict, current_us
         }
     )
     
-    # Create or update user with admin role
+    # Update user role if they exist
     existing_user = await db.users.find_one({"email": request["email"]})
-    
     if existing_user:
-        # Update existing user to admin role
         await db.users.update_one(
             {"email": request["email"]},
             {
@@ -750,10 +1139,6 @@ async def approve_admin_request(request_id: str, approval_data: dict, current_us
                 }
             }
         )
-    else:
-        # Create new admin user (they'll need to complete registration)
-        # This is handled when they register with the same email
-        pass
     
     return {"message": "Admin request approved successfully"}
 
@@ -879,7 +1264,6 @@ async def update_user_status(user_id: str, status_data: dict, current_user: User
     
     return {"message": f"User status updated to {new_status}"}
 
-# Enhanced User Management Routes
 @api_router.post("/admin/users/bulk-action")
 async def bulk_user_action(action_data: BulkUserAction, current_user: User = Depends(get_super_admin)):
     """Perform bulk actions on multiple users"""
@@ -937,255 +1321,7 @@ async def bulk_user_action(action_data: BulkUserAction, current_user: User = Dep
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bulk action failed: {str(e)}")
 
-@api_router.post("/admin/users/{user_id}/reset-password")
-async def reset_user_password(user_id: str, reset_data: PasswordResetRequest, current_user: User = Depends(get_super_admin)):
-    """Reset a user's password"""
-    user = await db.users.find_one({"id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    temp_password = f"Reset{secrets.randbelow(9999):04d}!"
-    
-    await db.users.update_one(
-        {"id": user_id},
-        {
-            "$set": {
-                "password": get_password_hash(temp_password),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-        }
-    )
-    
-    # Log the activity
-    activity = SystemActivity(
-        user_id=current_user.id,
-        action="reset_password",
-        target_type="user",
-        target_id=user_id,
-        details={"target_user": user["email"]}
-    )
-    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
-    
-    return {
-        "message": "Password reset successfully",
-        "temporary_password": temp_password,
-        "user_email": user["email"]
-    }
-
-# Enhanced Group Management Routes
-@api_router.post("/admin/groups", response_model=Group)
-async def create_group_admin(group_data: GroupCreate, current_user: User = Depends(get_super_admin)):
-    """Create a new group with enhanced features"""
-    group_dict = group_data.dict()
-    group_dict["admin_id"] = current_user.id
-    group_obj = Group(**group_dict)
-    
-    group_dict_for_db = prepare_for_mongo(group_obj.dict())
-    await db.groups.insert_one(group_dict_for_db)
-    
-    # Log the activity
-    activity = SystemActivity(
-        user_id=current_user.id,
-        action="create_group",
-        target_type="group",
-        target_id=group_obj.id,
-        details={"group_name": group_obj.name, "group_type": group_obj.group_type}
-    )
-    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
-    
-    return group_obj
-
-@api_router.get("/admin/groups/all", response_model=List[Group])
-async def get_all_groups_admin(current_user: User = Depends(get_super_admin)):
-    """Get all groups for admin management"""
-    groups = await db.groups.find().sort("created_at", -1).to_list(1000)
-    return [Group(**parse_from_mongo(group)) for group in groups]
-
-@api_router.put("/admin/groups/{group_id}/members")
-async def update_group_membership(group_id: str, membership_data: GroupMembershipUpdate, current_user: User = Depends(get_super_admin)):
-    """Add or remove multiple members from a group"""
-    group = await db.groups.find_one({"id": group_id})
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
-    
-    if membership_data.action == "add":
-        if membership_data.role == "leader":
-            await db.groups.update_one(
-                {"id": group_id},
-                {"$addToSet": {"leaders": {"$each": membership_data.user_ids}}}
-            )
-        await db.groups.update_one(
-            {"id": group_id},
-            {"$addToSet": {"members": {"$each": membership_data.user_ids}}}
-        )
-        message = f"Added {len(membership_data.user_ids)} members to group"
-    
-    elif membership_data.action == "remove":
-        await db.groups.update_one(
-            {"id": group_id},
-            {
-                "$pullAll": {
-                    "members": membership_data.user_ids,
-                    "leaders": membership_data.user_ids
-                }
-            }
-        )
-        message = f"Removed {len(membership_data.user_ids)} members from group"
-    
-    else:
-        raise HTTPException(status_code=400, detail="Invalid action")
-    
-    # Log the activity
-    activity = SystemActivity(
-        user_id=current_user.id,
-        action=f"group_membership_{membership_data.action}",
-        target_type="group",
-        target_id=group_id,
-        details={"user_ids": membership_data.user_ids, "role": membership_data.role}
-    )
-    await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
-    
-    return {"message": message}
-
-# Training Video Management Routes
-@api_router.post("/admin/training/videos", response_model=TrainingVideo)
-async def create_training_video(video_data: TrainingVideoCreate, current_user: User = Depends(get_super_admin)):
-    """Create a new training video entry"""
-    video_dict = video_data.dict()
-    video_dict["created_by"] = current_user.id
-    video_dict["file_path"] = f"/uploads/videos/{uuid.uuid4()}.mp4"  # Placeholder
-    video_obj = TrainingVideo(**video_dict)
-    
-    video_dict_for_db = prepare_for_mongo(video_obj.dict())
-    await db.training_videos.insert_one(video_dict_for_db)
-    
-    return video_obj
-
-@api_router.get("/admin/training/videos", response_model=List[TrainingVideo])
-async def get_training_videos(current_user: User = Depends(get_super_admin)):
-    """Get all training videos"""
-    videos = await db.training_videos.find({"is_active": True}).sort("created_at", -1).to_list(1000)
-    return [TrainingVideo(**parse_from_mongo(video)) for video in videos]
-
-@api_router.get("/admin/training/progress")
-async def get_training_progress(current_user: User = Depends(get_super_admin)):
-    """Get training progress for all users"""
-    progress = await db.video_progress.find().to_list(1000)
-    videos = await db.training_videos.find({"is_active": True}).to_list(1000)
-    users = await db.users.find({"status": AccountStatus.ACTIVE}).to_list(1000)
-    
-    # Calculate completion rates
-    video_stats = {}
-    for video in videos:
-        video_id = video["id"]
-        total_required = len([u for u in users if video.get("mandatory", False) or not video.get("target_roles") or u.get("role") in video.get("target_roles", [])])
-        completed = len([p for p in progress if p["video_id"] == video_id and p["completed"]])
-        
-        video_stats[video_id] = {
-            "video_title": video["title"],
-            "total_required": total_required,
-            "completed": completed,
-            "completion_rate": (completed / total_required * 100) if total_required > 0 else 0
-        }
-    
-    return {"video_stats": video_stats, "total_users": len(users)}
-
-# Meeting Management Routes
-@api_router.post("/admin/meetings", response_model=Meeting)
-async def create_meeting(meeting_data: MeetingCreate, current_user: User = Depends(get_super_admin)):
-    """Create a new meeting"""
-    meeting_dict = meeting_data.dict()
-    meeting_dict["organizer_id"] = current_user.id
-    meeting_obj = Meeting(**meeting_dict)
-    
-    meeting_dict_for_db = prepare_for_mongo(meeting_obj.dict())
-    await db.meetings.insert_one(meeting_dict_for_db)
-    
-    return meeting_obj
-
-@api_router.get("/admin/meetings", response_model=List[Meeting])
-async def get_meetings(current_user: User = Depends(get_super_admin)):
-    """Get all meetings"""
-    meetings = await db.meetings.find().sort("scheduled_date", 1).to_list(1000)
-    return [Meeting(**parse_from_mongo(meeting)) for meeting in meetings]
-
-# Financial Dashboard Routes
-@api_router.post("/admin/donations", response_model=Donation)
-async def record_donation(donation_data: Dict[str, Any], current_user: User = Depends(get_super_admin)):
-    """Record a donation (for testing purposes)"""
-    donation_obj = Donation(**donation_data)
-    donation_dict_for_db = prepare_for_mongo(donation_obj.dict())
-    await db.donations.insert_one(donation_dict_for_db)
-    return donation_obj
-
-@api_router.get("/admin/donations/stats")
-async def get_donation_stats(current_user: User = Depends(get_super_admin)):
-    """Get donation statistics"""
-    # Get donations from last 30 days
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    
-    recent_donations = await db.donations.find({
-        "created_at": {"$gte": thirty_days_ago.isoformat()}
-    }).to_list(1000)
-    
-    total_donations = await db.donations.find().to_list(1000)
-    
-    # Calculate statistics
-    total_amount = sum(d.get("amount", 0) for d in total_donations)
-    recent_amount = sum(d.get("amount", 0) for d in recent_donations)
-    total_count = len(total_donations)
-    recent_count = len(recent_donations)
-    
-    # Category breakdown
-    categories = {}
-    for donation in total_donations:
-        category = donation.get("category", "General Fund")
-        categories[category] = categories.get(category, 0) + donation.get("amount", 0)
-    
-    return {
-        "total_amount": total_amount,
-        "total_count": total_count,
-        "recent_amount": recent_amount,
-        "recent_count": recent_count,
-        "average_donation": total_amount / total_count if total_count > 0 else 0,
-        "categories": categories
-    }
-
-# System Analytics Routes
-@api_router.get("/admin/analytics/overview")
-async def get_system_analytics(current_user: User = Depends(get_super_admin)):
-    """Get system overview analytics"""
-    # User statistics
-    total_users = await db.users.count_documents({})
-    active_users = await db.users.count_documents({"status": AccountStatus.ACTIVE})
-    recent_users = await db.users.count_documents({
-        "created_at": {"$gte": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()}
-    })
-    
-    # Group statistics
-    total_groups = await db.groups.count_documents({"is_active": True})
-    
-    # Activity statistics
-    recent_activities = await db.system_activities.count_documents({
-        "created_at": {"$gte": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()}
-    })
-    
-    return {
-        "users": {
-            "total": total_users,
-            "active": active_users,
-            "recent": recent_users,
-            "inactive": total_users - active_users
-        },
-        "groups": {
-            "total": total_groups
-        },
-        "activity": {
-            "recent_actions": recent_activities
-        }
-    }
-
-@api_router.get("/admin/activities", response_model=List[SystemActivity])
+@api_router.get("/activities", response_model=List[SystemActivity])
 async def get_system_activities(limit: int = 100, current_user: User = Depends(get_super_admin)):
     """Get recent system activities"""
     activities = await db.system_activities.find().sort("created_at", -1).limit(limit).to_list(limit)
@@ -1212,11 +1348,16 @@ async def initialize_system():
         "role": UserRole.SUPER_ADMIN,
         "status": AccountStatus.ACTIVE,
         "profile_picture": None,
+        "bio": "System Super Administrator",
+        "emergency_contact": None,
+        "time_zone": "UTC",
+        "language": "en",
         "points": 0,
         "coins": 700000000,  # 700 million initial coins
         "failed_login_attempts": 0,
         "last_failed_login": None,
         "email_verified": True,  # Pre-verified for super admin
+        "two_factor_enabled": False,
         "password": get_password_hash(temp_password),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -1269,11 +1410,16 @@ async def startup_event():
             "role": UserRole.SUPER_ADMIN,
             "status": AccountStatus.ACTIVE,
             "profile_picture": None,
+            "bio": "System Super Administrator",
+            "emergency_contact": None,
+            "time_zone": "UTC",
+            "language": "en",
             "points": 0,
             "coins": 700000000,
             "failed_login_attempts": 0,
             "last_failed_login": None,
             "email_verified": True,
+            "two_factor_enabled": False,
             "password": get_password_hash(temp_password),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
