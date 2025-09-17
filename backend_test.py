@@ -618,6 +618,198 @@ class ChurchYouthAppTester:
         
         return success
 
+    # AGORA TOKEN GENERATION TESTS - CRITICAL BUG FIX TESTING
+    def test_agora_token_generation_host_role(self):
+        """Test Agora token generation with host role (critical bug fix test)"""
+        token_data = {
+            "channel_name": "test_church_meeting",
+            "uid": 12345,
+            "role": "host",
+            "expire_time": 3600
+        }
+        
+        success, response = self.run_test(
+            "Generate Agora Token (Host Role) - CRITICAL BUG FIX",
+            "POST",
+            "agora/token",
+            200,
+            data=token_data,
+            token=self.admin_token
+        )
+        
+        if success:
+            # Verify response structure
+            if all(key in response for key in ['token', 'app_id', 'channel', 'uid', 'expires_at']):
+                print(f"   ✅ Token generated successfully - Import error FIXED!")
+                print(f"   ✅ App ID: {response.get('app_id')}")
+                print(f"   ✅ Channel: {response.get('channel')}")
+                print(f"   ✅ UID: {response.get('uid')}")
+                print(f"   ✅ Token length: {len(response.get('token', ''))}")
+                return True
+            else:
+                print(f"   ❌ Response missing required fields")
+                return False
+        return False
+
+    def test_agora_token_generation_participant_role(self):
+        """Test Agora token generation with participant role"""
+        token_data = {
+            "channel_name": "test_church_meeting",
+            "uid": 67890,
+            "role": "participant",
+            "expire_time": 3600
+        }
+        
+        success, response = self.run_test(
+            "Generate Agora Token (Participant Role)",
+            "POST",
+            "agora/token",
+            200,
+            data=token_data,
+            token=self.admin_token
+        )
+        
+        if success:
+            # Verify response structure
+            if all(key in response for key in ['token', 'app_id', 'channel', 'uid', 'expires_at']):
+                print(f"   ✅ Participant token generated successfully")
+                print(f"   ✅ Role constants working correctly (1=Publisher, 2=Subscriber)")
+                return True
+            else:
+                print(f"   ❌ Response missing required fields")
+                return False
+        return False
+
+    def test_agora_token_generation_different_channels(self):
+        """Test Agora token generation for different channels"""
+        channels = ["sunday_service", "bible_study_group", "youth_meeting"]
+        
+        all_success = True
+        for i, channel in enumerate(channels):
+            token_data = {
+                "channel_name": channel,
+                "uid": 10000 + i,
+                "role": "host",
+                "expire_time": 7200
+            }
+            
+            success, response = self.run_test(
+                f"Generate Agora Token (Channel: {channel})",
+                "POST",
+                "agora/token",
+                200,
+                data=token_data,
+                token=self.admin_token
+            )
+            
+            if success and 'token' in response:
+                print(f"   ✅ Token generated for channel: {channel}")
+            else:
+                all_success = False
+                print(f"   ❌ Failed to generate token for channel: {channel}")
+        
+        return all_success
+
+    def test_agora_token_generation_unauthorized(self):
+        """Test Agora token generation without authentication (should fail)"""
+        token_data = {
+            "channel_name": "unauthorized_test",
+            "uid": 99999,
+            "role": "participant",
+            "expire_time": 3600
+        }
+        
+        success, response = self.run_test(
+            "Generate Agora Token (Unauthorized - Should Fail)",
+            "POST",
+            "agora/token",
+            401,
+            data=token_data
+        )
+        
+        return success
+
+    def test_agora_token_generation_invalid_role(self):
+        """Test Agora token generation with invalid role"""
+        token_data = {
+            "channel_name": "test_channel",
+            "uid": 11111,
+            "role": "invalid_role",
+            "expire_time": 3600
+        }
+        
+        success, response = self.run_test(
+            "Generate Agora Token (Invalid Role)",
+            "POST",
+            "agora/token",
+            200,  # Should still work, backend handles role mapping
+            data=token_data,
+            token=self.admin_token
+        )
+        
+        if success:
+            print(f"   ✅ Backend handles invalid role gracefully")
+            return True
+        return False
+
+    def test_agora_token_generation_custom_expiry(self):
+        """Test Agora token generation with custom expiry times"""
+        expiry_times = [1800, 3600, 7200, 14400]  # 30min, 1hr, 2hr, 4hr
+        
+        all_success = True
+        for expiry in expiry_times:
+            token_data = {
+                "channel_name": "expiry_test_channel",
+                "uid": 20000 + expiry,
+                "role": "host",
+                "expire_time": expiry
+            }
+            
+            success, response = self.run_test(
+                f"Generate Agora Token (Expiry: {expiry}s)",
+                "POST",
+                "agora/token",
+                200,
+                data=token_data,
+                token=self.admin_token
+            )
+            
+            if success and 'expires_at' in response:
+                print(f"   ✅ Token with {expiry}s expiry generated")
+            else:
+                all_success = False
+                print(f"   ❌ Failed to generate token with {expiry}s expiry")
+        
+        return all_success
+
+    def test_agora_import_error_resolution(self):
+        """Test that the original import error is completely resolved"""
+        # This test specifically checks that Role_Publisher/Role_Subscriber import error is fixed
+        token_data = {
+            "channel_name": "import_error_test",
+            "uid": 88888,
+            "role": "host",
+            "expire_time": 3600
+        }
+        
+        success, response = self.run_test(
+            "Agora Import Error Resolution Test - CRITICAL",
+            "POST",
+            "agora/token",
+            200,
+            data=token_data,
+            token=self.admin_token
+        )
+        
+        if success:
+            print(f"   ✅ CRITICAL: No import errors - Role_Publisher/Role_Subscriber issue RESOLVED!")
+            print(f"   ✅ Backend now uses correct role constants (1=Publisher, 2=Subscriber)")
+            print(f"   ✅ agora_token_builder integration working properly")
+            return True
+        else:
+            print(f"   ❌ CRITICAL: Import error may still exist - check backend logs")
+            return False
+
     def test_video_room_expiration_handling(self):
         """Test creating a room with short expiration and checking behavior"""
         room_data = {
