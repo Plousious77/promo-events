@@ -251,6 +251,10 @@ Previous context: Implement Phase 2: Video Conferencing System with WebRTC-based
 
 ## agent_communication:
     - agent: "user"
+      message: "CRITICAL FRONTEND BUG REPORT: AgoraUIKit error 'Cannot read properties of undefined (reading 'role')' - video conferencing UI failing despite backend being fixed. User provided detailed solution with role mapping and component structure fixes."
+    - agent: "main"
+      message: "CRITICAL FRONTEND FIX APPLIED: Fixed AgoraUIKit undefined role error by adding role property to agoraConfig, implementing church role mapping (leaders -> 'host', members -> 'audience'), updating component structure to use rtcProps instead of connectionData, and adding role validation with fallbacks. Frontend testing required to verify UI works."
+    - agent: "user"
       message: "CRITICAL BUG REPORT: Agora token generation failing with import error - 'cannot import name Role_Publisher from agora_token_builder'. This is blocking all video conferencing functionality. User provided specific fix instructions."
     - agent: "main"
       message: "CRITICAL FIX APPLIED: Fixed Agora token generation by updating imports to use correct role constants (1 for Publisher, 2 for Subscriber) instead of deprecated Role_Publisher/Role_Subscriber classes. Updated generate_rtc_token method in ChurchAgoraClient. Backend testing required to verify fix works."
