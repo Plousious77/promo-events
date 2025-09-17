@@ -531,6 +531,60 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const fetchGroups = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/groups/all`);
+      setGroups(response.data);
+    } catch (error) {
+      console.error('Failed to fetch groups:', error);
+    }
+  };
+
+  const fetchTrainingVideos = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/training/videos`);
+      setTrainingVideos(response.data);
+    } catch (error) {
+      console.error('Failed to fetch training videos:', error);
+    }
+  };
+
+  const fetchMeetings = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/meetings`);
+      setMeetings(response.data);
+    } catch (error) {
+      console.error('Failed to fetch meetings:', error);
+    }
+  };
+
+  const fetchDonationStats = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/donations/stats`);
+      setDonations(response.data);
+    } catch (error) {
+      console.error('Failed to fetch donation stats:', error);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/analytics/overview`);
+      setAnalytics(response.data);
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    }
+  };
+
+  const fetchActivities = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/activities`);
+      setActivities(response.data);
+    } catch (error) {
+      console.error('Failed to fetch activities:', error);
+    }
+  };
+
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     setLoading(true);
