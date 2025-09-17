@@ -231,6 +231,10 @@ Previous context: Implement Phase 2: Video Conferencing System with WebRTC-based
   test_priority: "critical_first"
 
 ## agent_communication:
+    - agent: "user"
+      message: "CRITICAL BUG REPORT: Agora token generation failing with import error - 'cannot import name Role_Publisher from agora_token_builder'. This is blocking all video conferencing functionality. User provided specific fix instructions."
+    - agent: "main"
+      message: "CRITICAL FIX APPLIED: Fixed Agora token generation by updating imports to use correct role constants (1 for Publisher, 2 for Subscriber) instead of deprecated Role_Publisher/Role_Subscriber classes. Updated generate_rtc_token method in ChurchAgoraClient. Backend testing required to verify fix works."
     - agent: "main"
       message: "Starting Phase 2: Video Conferencing System implementation. Focus on Daily.co integration with support for 1,000 participants, cloud recording, and group management integration."
     - agent: "testing"
