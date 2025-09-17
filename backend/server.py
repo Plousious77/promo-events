@@ -1871,6 +1871,506 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Task Management Routes - Phase 2 Time Tracking System
+@api_router.post("/tasks/", response_model=Task)
+async def create_task(
+    task_data: TaskCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new task (Admin/Leader only)"""
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create tasks"
+        )
+    
+    try:
+        task = Task(
+            **task_data.dict(),
+            creator_id=current_user.id
+        )
+        
+        # Store task in database
+        task_dict_for_db = prepare_for_mongo(task.dict())
+        await db.tasks.insert_one(task_dict_for_db)
+        
+        # Create attendance records for assigned users
+        if task_data.assigned_users:
+            attendance_records = []
+            for user_id in task_data.assigned_users:
+                attendance = TaskAttendance(
+                    task_id=task.id,
+                    user_id=user_id
+                )
+                attendance_records.append(prepare_for_mongo(attendance.dict()))
+            
+            if attendance_records:
+                await db.task_attendance.insert_many(attendance_records)
+        
+        # Handle group assignments
+        if task_data.assigned_groups:
+            for group_id in task_data.assigned_groups:
+                # Get all users in the group
+                group_users = await db.users.find({"group_id": group_id, "status": AccountStatus.ACTIVE}).to_list(None)
+                attendance_records = []
+                for user in group_users:
+                    attendance = TaskAttendance(
+                        task_id=task.id,
+                        user_id=user["id"]
+                    )
+                    attendance_records.append(prepare_for_mongo(attendance.dict()))
+                
+                if attendance_records:
+                    await db.task_attendance.insert_many(attendance_records)
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="create_task",
+            target_type="task",
+            target_id=task.id,
+            details={
+                "task_name": task.name,
+                "category": task.category,
+                "assigned_users_count": len(task_data.assigned_users),
+                "assigned_groups_count": len(task_data.assigned_groups)
+            }
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return task
+        
+    except Exception as e:
+        logging.error(f"Failed to create task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create task"
+        )
+
+@api_router.get("/tasks/", response_model=List[Task])
+async def get_tasks(
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+    assigned_to_me: Optional[bool] = False,
+    current_user: User = Depends(get_current_user)
+):
+    """Get tasks based on filters"""
+    try:
+        query = {"is_active": True}
+        
+        if category:
+            query["category"] = category
+        
+        if status:
+            query["status"] = status
+        
+        if assigned_to_me:
+            # Get tasks assigned to current user
+            user_attendances = await db.task_attendance.find({"user_id": current_user.id}).to_list(None)
+            task_ids = [att["task_id"] for att in user_attendances]
+            query["id"] = {"$in": task_ids}
+        elif current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+            # Regular users only see their assigned tasks
+            user_attendances = await db.task_attendance.find({"user_id": current_user.id}).to_list(None)
+            task_ids = [att["task_id"] for att in user_attendances]
+            query["id"] = {"$in": task_ids}
+        
+        tasks = await db.tasks.find(query).sort("start_datetime", 1).to_list(100)
+        return [Task(**parse_from_mongo(task)) for task in tasks]
+        
+    except Exception as e:
+        logging.error(f"Failed to fetch tasks: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch tasks"
+        )
+
+@api_router.post("/tasks/{task_id}/punch-in")
+async def punch_in_task(
+    task_id: str,
+    punch_data: PunchInRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Punch in to a task with strict punctuality enforcement"""
+    try:
+        # Get task
+        task = await db.tasks.find_one({"id": task_id, "is_active": True})
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found"
+            )
+        
+        # Get attendance record
+        attendance = await db.task_attendance.find_one({
+            "task_id": task_id,
+            "user_id": current_user.id
+        })
+        if not attendance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="You are not assigned to this task"
+            )
+        
+        if attendance.get("punch_in_time"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You have already punched in to this task"
+            )
+        
+        # Calculate timing
+        current_time = datetime.now(timezone.utc)
+        task_start_time = datetime.fromisoformat(task["start_datetime"].replace('Z', '+00:00')) if isinstance(task["start_datetime"], str) else task["start_datetime"]
+        
+        # 15-minute grace period enforcement
+        grace_period_end = task_start_time + timedelta(minutes=15)
+        minutes_late = max(0, int((current_time - task_start_time).total_seconds() / 60))
+        is_late = current_time > task_start_time
+        is_within_grace_period = current_time <= grace_period_end
+        
+        # Location verification if required
+        location_verified = True
+        if task.get("gps_latitude") and task.get("gps_longitude") and punch_data.latitude and punch_data.longitude:
+            from geopy.distance import geodesic
+            task_location = (task["gps_latitude"], task["gps_longitude"])
+            user_location = (punch_data.latitude, punch_data.longitude)
+            distance = geodesic(task_location, user_location).meters
+            location_verified = distance <= task.get("check_in_radius_meters", 100)
+            
+            if not location_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"You must be within {task.get('check_in_radius_meters', 100)} meters of the task location to punch in"
+                )
+        
+        # Calculate rewards based on punctuality
+        points_earned = 0
+        coins_earned = 0
+        
+        if is_within_grace_period:
+            if not is_late:
+                # On time - full rewards
+                points_earned = task.get("points_reward", 0) + task.get("punctuality_bonus_points", 0)
+                coins_earned = task.get("coins_reward", 0) + task.get("punctuality_bonus_coins", 0)
+            else:
+                # Late but within grace period - 50% rewards
+                points_earned = int((task.get("points_reward", 0) + task.get("punctuality_bonus_points", 0)) * 0.5)
+                coins_earned = int((task.get("coins_reward", 0) + task.get("punctuality_bonus_coins", 0)) * 0.5)
+        else:
+            # Beyond grace period - NO REWARDS
+            points_earned = 0
+            coins_earned = 0
+        
+        # Update attendance record
+        update_data = {
+            "punch_in_time": current_time.isoformat(),
+            "status": AttendanceStatus.PUNCHED_IN,
+            "is_late": is_late,
+            "minutes_late": minutes_late,
+            "is_within_grace_period": is_within_grace_period,
+            "points_earned": points_earned,
+            "coins_earned": coins_earned,
+            "location_verified": location_verified,
+            "punch_in_latitude": punch_data.latitude,
+            "punch_in_longitude": punch_data.longitude,
+            "photo_verification_url": punch_data.photo_verification,
+            "updated_at": current_time.isoformat()
+        }
+        
+        await db.task_attendance.update_one(
+            {"task_id": task_id, "user_id": current_user.id},
+            {"$set": update_data}
+        )
+        
+        # Update user points and coins immediately (preview of what they'll get)
+        if points_earned > 0 or coins_earned > 0:
+            await db.users.update_one(
+                {"id": current_user.id},
+                {
+                    "$inc": {
+                        "points": points_earned,
+                        "coins": coins_earned
+                    }
+                }
+            )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="punch_in",
+            target_type="task",
+            target_id=task_id,
+            details={
+                "task_name": task["name"],
+                "minutes_late": minutes_late,
+                "is_within_grace_period": is_within_grace_period,
+                "points_earned": points_earned,
+                "coins_earned": coins_earned
+            }
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {
+            "message": "Successfully punched in!",
+            "punch_in_time": current_time.isoformat(),
+            "is_late": is_late,
+            "minutes_late": minutes_late,
+            "is_within_grace_period": is_within_grace_period,
+            "points_earned": points_earned,
+            "coins_earned": coins_earned,
+            "reward_status": "Full Rewards" if not is_late else ("50% Rewards (Grace Period)" if is_within_grace_period else "NO REWARDS - Too Late"),
+            "location_verified": location_verified
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to punch in: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to punch in to task"
+        )
+
+@api_router.post("/tasks/{task_id}/punch-out")
+async def punch_out_task(
+    task_id: str,
+    punch_data: PunchOutRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Punch out of a task"""
+    try:
+        # Get attendance record
+        attendance = await db.task_attendance.find_one({
+            "task_id": task_id,
+            "user_id": current_user.id
+        })
+        
+        if not attendance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attendance record not found"
+            )
+        
+        if not attendance.get("punch_in_time"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You must punch in before punching out"
+            )
+        
+        if attendance.get("punch_out_time"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You have already punched out of this task"
+            )
+        
+        current_time = datetime.now(timezone.utc)
+        punch_in_time = datetime.fromisoformat(attendance["punch_in_time"].replace('Z', '+00:00'))
+        duration_minutes = int((current_time - punch_in_time).total_seconds() / 60)
+        
+        # Update attendance record
+        update_data = {
+            "punch_out_time": current_time.isoformat(),
+            "status": AttendanceStatus.COMPLETED,
+            "completion_notes": punch_data.completion_notes,
+            "task_rating": punch_data.task_rating,
+            "updated_at": current_time.isoformat()
+        }
+        
+        await db.task_attendance.update_one(
+            {"task_id": task_id, "user_id": current_user.id},
+            {"$set": update_data}
+        )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="punch_out",
+            target_type="task",
+            target_id=task_id,
+            details={
+                "duration_minutes": duration_minutes,
+                "task_rating": punch_data.task_rating
+            }
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {
+            "message": "Successfully punched out!",
+            "punch_out_time": current_time.isoformat(),
+            "duration_minutes": duration_minutes,
+            "total_points_earned": attendance.get("points_earned", 0),
+            "total_coins_earned": attendance.get("coins_earned", 0)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to punch out: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to punch out of task"
+        )
+
+@api_router.get("/tasks/{task_id}/attendance", response_model=List[TaskAttendance])
+async def get_task_attendance(
+    task_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get attendance records for a task (Admin only)"""
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can view task attendance"
+        )
+    
+    try:
+        attendance_records = await db.task_attendance.find({"task_id": task_id}).to_list(None)
+        return [TaskAttendance(**parse_from_mongo(record)) for record in attendance_records]
+        
+    except Exception as e:
+        logging.error(f"Failed to fetch task attendance: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch task attendance"
+        )
+
+@api_router.get("/my-tasks/upcoming")
+async def get_my_upcoming_tasks(
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's upcoming tasks for the next 7 days"""
+    try:
+        # Get user's task assignments
+        user_attendances = await db.task_attendance.find({"user_id": current_user.id}).to_list(None)
+        task_ids = [att["task_id"] for att in user_attendances]
+        
+        if not task_ids:
+            return []
+        
+        # Get upcoming tasks
+        current_time = datetime.now(timezone.utc)
+        week_from_now = current_time + timedelta(days=7)
+        
+        tasks = await db.tasks.find({
+            "id": {"$in": task_ids},
+            "is_active": True,
+            "start_datetime": {"$gte": current_time.isoformat(), "$lte": week_from_now.isoformat()}
+        }).sort("start_datetime", 1).to_list(50)
+        
+        # Combine with attendance data
+        result = []
+        for task in tasks:
+            task_data = parse_from_mongo(task)
+            attendance = next((att for att in user_attendances if att["task_id"] == task["id"]), None)
+            
+            result.append({
+                "task": task_data,
+                "attendance": parse_from_mongo(attendance) if attendance else None,
+                "time_until_start": int((datetime.fromisoformat(task["start_datetime"].replace('Z', '+00:00')) - current_time).total_seconds() / 60),
+                "can_punch_in": datetime.fromisoformat(task["start_datetime"].replace('Z', '+00:00')) <= current_time + timedelta(minutes=15)
+            })
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"Failed to fetch upcoming tasks: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch upcoming tasks"
+        )
+
+@api_router.get("/my-attendance/stats")
+async def get_my_attendance_stats(
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's attendance and punctuality statistics"""
+    try:
+        # Get all user's attendance records
+        attendance_records = await db.task_attendance.find({"user_id": current_user.id}).to_list(None)
+        
+        total_tasks = len(attendance_records)
+        completed_tasks = len([att for att in attendance_records if att.get("status") == AttendanceStatus.COMPLETED])
+        on_time_tasks = len([att for att in attendance_records if att.get("status") == AttendanceStatus.COMPLETED and not att.get("is_late")])
+        grace_period_tasks = len([att for att in attendance_records if att.get("status") == AttendanceStatus.COMPLETED and att.get("is_late") and att.get("is_within_grace_period")])
+        late_tasks = len([att for att in attendance_records if att.get("status") == AttendanceStatus.COMPLETED and att.get("is_late") and not att.get("is_within_grace_period")])
+        
+        # Calculate current streak
+        recent_attendance = sorted([att for att in attendance_records if att.get("status") == AttendanceStatus.COMPLETED], 
+                                 key=lambda x: x.get("updated_at", ""), reverse=True)
+        
+        current_streak = 0
+        for att in recent_attendance:
+            if not att.get("is_late") or (att.get("is_late") and att.get("is_within_grace_period")):
+                current_streak += 1
+            else:
+                break
+        
+        # Calculate total rewards
+        total_points_earned = sum([att.get("points_earned", 0) for att in attendance_records])
+        total_coins_earned = sum([att.get("coins_earned", 0) for att in attendance_records])
+        
+        punctuality_rate = (on_time_tasks + grace_period_tasks) / total_tasks * 100 if total_tasks > 0 else 0
+        completion_rate = completed_tasks / total_tasks * 100 if total_tasks > 0 else 0
+        
+        return {
+            "total_tasks_assigned": total_tasks,
+            "completed_tasks": completed_tasks,
+            "on_time_tasks": on_time_tasks,
+            "grace_period_tasks": grace_period_tasks,
+            "late_tasks": late_tasks,
+            "punctuality_rate": round(punctuality_rate, 1),
+            "completion_rate": round(completion_rate, 1),
+            "current_streak": current_streak,
+            "total_points_earned": total_points_earned,
+            "total_coins_earned": total_coins_earned,
+            "average_minutes_late": round(sum([att.get("minutes_late", 0) for att in attendance_records]) / len(attendance_records), 1) if attendance_records else 0
+        }
+        
+    except Exception as e:
+        logging.error(f"Failed to fetch attendance stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch attendance statistics"
+        )
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a task (Admin only)"""
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.GROUP_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can delete tasks"
+        )
+    
+    try:
+        # Soft delete task
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        # Log the activity
+        activity = SystemActivity(
+            user_id=current_user.id,
+            action="delete_task",
+            target_type="task",
+            target_id=task_id,
+            details={"deleted_at": datetime.now(timezone.utc).isoformat()}
+        )
+        await db.system_activities.insert_one(prepare_for_mongo(activity.dict()))
+        
+        return {"message": "Task deleted successfully"}
+        
+    except Exception as e:
+        logging.error(f"Failed to delete task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete task"
+        )
+
 @app.on_event("startup")
 async def startup_db_client():
     try:
