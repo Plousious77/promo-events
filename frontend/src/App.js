@@ -499,6 +499,7 @@ const AuthPage = () => {
 const SuperAdminPortal = () => {
   const { user, logout, changePassword, updateProfile, cleanVirginState, API } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
+  const [isUserView, setIsUserView] = useState(false); // New state for portal switching
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
   const [meetings, setMeetings] = useState([]);
