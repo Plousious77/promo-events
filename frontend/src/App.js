@@ -2569,28 +2569,41 @@ const RegularMemberView = ({ user }) => {
   );
 };
 
-// Church Video Conference Content Component - Complete Agora Implementation
+// Enhanced Church Meeting Interface Component - Complete Managed Services API Integration
 const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
   const { user } = useAuth(); // Get current user for role mapping
-  const [churchVideoRooms, setChurchVideoRooms] = useState([]);
-  const [showCreateRoom, setShowCreateRoom] = useState(false);
-  const [activeRoom, setActiveRoom] = useState(null);
+  
+  // Main state
+  const [channelData, setChannelData] = useState(null);
+  const [joinData, setJoinData] = useState(null);
+  const [jwtToken, setJwtToken] = useState(null);
   const [loading, setLoading] = useState(false);
   const [videoCall, setVideoCall] = useState(false);
-  const [agoraConfig, setAgoraConfig] = useState(null);
-  const [scriptureDisplay, setScriptureDisplay] = useState('');
+  
+  // Church service controls
+  const [isRecording, setIsRecording] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-
-  // Room creation form state
-  const [newRoom, setNewRoom] = useState({
-    room_name: '',
-    service_type: 'main_service',
-    max_participants: 1000,
-    enable_recording: true,
-    enable_streaming: false,
-    streaming_platforms: [],
-    group_id: ''
+  const [currentScripture, setCurrentScripture] = useState('');
+  const [slideShow, setSlideShow] = useState(null);
+  const [cameraDevice, setCameraDevice] = useState(null);
+  
+  // Meeting management
+  const [availableChannels, setAvailableChannels] = useState([]);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  
+  // Form state for channel creation
+  const [newChannel, setNewChannel] = useState({
+    title: '',
+    group_id: '',
+    enable_pstn: true
   });
+
+  // Agora configuration
+  const AGORA_CONFIG = {
+    baseURL: 'https://managedservices-prod.rteappbuilder.com',
+    projectId: 'default-application_10499703'
+  };
 
   // Map user role to Agora role for church-specific permissions
   const getUserAgoraRole = (userType) => {
