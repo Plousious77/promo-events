@@ -646,47 +646,49 @@ const SuperAdminPortal = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Enhanced Sidebar */}
-      <div className="w-72 bg-white shadow-xl flex flex-col border-r border-gray-200">
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-purple-700">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
-              <span className="text-2xl">👑</span>
-            </div>
-            <div>
-              <h3 className="font-bold text-white text-lg">{user?.full_name}</h3>
-              <p className="text-purple-200 text-sm font-medium">Super Administrator</p>
+      {/* Enhanced Sidebar - Hidden in User View */}
+      {!isUserView && (
+        <div className="w-72 bg-white shadow-xl flex flex-col border-r border-gray-200">
+          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-purple-700">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
+                <span className="text-2xl">👑</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-lg">{user?.full_name}</h3>
+                <p className="text-purple-200 text-sm font-medium">Super Administrator</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <nav className="flex-1 p-4 space-y-2">
-          {navigation.map((item) => (
+          <nav className="flex-1 p-4 space-y-2">
+            {navigation.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
+                  activeTab === item.id
+                    ? `${item.color} text-white shadow-lg transform scale-105`
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-xl">{item.icon}</span>
+                <span className="font-medium">{item.name}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="p-4 border-t border-gray-200">
             <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
-                activeTab === item.id
-                  ? `${item.color} text-white shadow-lg transform scale-105`
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
+              onClick={logout}
+              className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors duration-200"
             >
-              <span className="text-xl">{item.icon}</span>
-              <span className="font-medium">{item.name}</span>
+              <span className="text-xl">🚪</span>
+              <span className="font-medium">Sign Out</span>
             </button>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-gray-200">
-          <button
-            onClick={logout}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors duration-200"
-          >
-            <span className="text-xl">🚪</span>
-            <span className="font-medium">Sign Out</span>
-          </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
