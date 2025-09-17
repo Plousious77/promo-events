@@ -115,6 +115,31 @@ const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateProfile = async (profileData) => {
+    try {
+      await axios.put(`${API}/super-admin/profile`, profileData);
+      await fetchCurrentUser(); // Refresh user data
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Profile update failed' 
+      };
+    }
+  };
+
+  const cleanVirginState = async () => {
+    try {
+      await axios.post(`${API}/system/clean-virgin-state`);
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Failed to clean system' 
+      };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
@@ -129,6 +154,8 @@ const AuthProvider = ({ children }) => {
       verifyEmail,
       resendVerification,
       changePassword,
+      updateProfile,
+      cleanVirginState,
       logout, 
       loading, 
       API 
@@ -467,42 +494,59 @@ const AuthPage = () => {
   );
 };
 
-// Super Admin Dashboard
-const SuperAdminDashboard = () => {
-  const { user, logout, changePassword, API } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [users, setUsers] = useState([]);
-  const [adminRequests, setAdminRequests] = useState([]);
-  const [accessCodes, setAccessCodes] = useState([]);
+// Super Admin Portal Component
+const SuperAdminPortal = () => {
+  const { user, logout, changePassword, updateProfile, cleanVirginState, API } = useAuth();
+  const [activeTab, setActiveTab] = useState('overview');
   const [groups, setGroups] = useState([]);
-  const [trainingVideos, setTrainingVideos] = useState([]);
+  const [users, setUsers] = useState([]);
   const [meetings, setMeetings] = useState([]);
-  const [donations, setDonations] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
+  const [systemStats, setSystemStats] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  
+  // Form states
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
-  const [codeForm, setCodeForm] = useState({
-    phone_last_four: ''
+  
+  const [profileForm, setProfileForm] = useState({
+    full_name: user?.full_name || '',
+    phone: user?.phone || '',
+    bio: user?.bio || '',
+    emergency_contact: user?.emergency_contact || '',
+    time_zone: user?.time_zone || 'UTC',
+    language: user?.language || 'en'
   });
-  const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
-    if (activeTab === 'users') fetchUsers();
-    if (activeTab === 'admin-requests') fetchAdminRequests();
-    if (activeTab === 'access-codes') fetchAccessCodes();
+    fetchSystemStats();
     if (activeTab === 'groups') fetchGroups();
-    if (activeTab === 'training') fetchTrainingVideos();
+    if (activeTab === 'users') fetchUsers();
     if (activeTab === 'meetings') fetchMeetings();
-    if (activeTab === 'finances') fetchDonationStats();
-    if (activeTab === 'analytics') fetchAnalytics();
     if (activeTab === 'activities') fetchActivities();
   }, [activeTab]);
+
+  const fetchSystemStats = async () => {
+    try {
+      const response = await axios.get(`${API}/system/stats`);
+      setSystemStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch system stats:', error);
+    }
+  };
+
+  const fetchGroups = async () => {
+    try {
+      const response = await axios.get(`${API}/groups`);
+      setGroups(response.data);
+    } catch (error) {
+      console.error('Failed to fetch groups:', error);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -513,72 +557,18 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  const fetchAdminRequests = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/requests`);
-      setAdminRequests(response.data);
-    } catch (error) {
-      console.error('Failed to fetch admin requests:', error);
-    }
-  };
-
-  const fetchAccessCodes = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/access-codes`);
-      setAccessCodes(response.data);
-    } catch (error) {
-      console.error('Failed to fetch access codes:', error);
-    }
-  };
-
-  const fetchGroups = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/groups/all`);
-      setGroups(response.data);
-    } catch (error) {
-      console.error('Failed to fetch groups:', error);
-    }
-  };
-
-  const fetchTrainingVideos = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/training/videos`);
-      setTrainingVideos(response.data);
-    } catch (error) {
-      console.error('Failed to fetch training videos:', error);
-    }
-  };
-
   const fetchMeetings = async () => {
     try {
-      const response = await axios.get(`${API}/admin/meetings`);
+      const response = await axios.get(`${API}/meetings`);
       setMeetings(response.data);
     } catch (error) {
       console.error('Failed to fetch meetings:', error);
     }
   };
 
-  const fetchDonationStats = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/donations/stats`);
-      setDonations(response.data);
-    } catch (error) {
-      console.error('Failed to fetch donation stats:', error);
-    }
-  };
-
-  const fetchAnalytics = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/analytics/overview`);
-      setAnalytics(response.data);
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error);
-    }
-  };
-
   const fetchActivities = async () => {
     try {
-      const response = await axios.get(`${API}/admin/activities`);
+      const response = await axios.get(`${API}/activities`);
       setActivities(response.data);
     } catch (error) {
       console.error('Failed to fetch activities:', error);
@@ -606,193 +596,88 @@ const SuperAdminDashboard = () => {
     setLoading(false);
   };
 
-  const generateAccessCode = async (e) => {
+  const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setMessage({ type: '', text: '' });
 
-    try {
-      const response = await axios.post(`${API}/admin/generate-access-code`, codeForm);
-      setMessage({ type: 'success', text: `Access code ${response.data.access_code} generated successfully!` });
-      setCodeForm({ phone_last_four: '' });
-      fetchAccessCodes();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to generate access code' });
+    const result = await updateProfile(profileForm);
+
+    if (result.success) {
+      setMessage({ type: 'success', text: 'Profile updated successfully!' });
+    } else {
+      setMessage({ type: 'error', text: result.error });
     }
 
     setLoading(false);
   };
 
-  const approveRequest = async (requestId, notes = '') => {
-    try {
-      await axios.post(`${API}/admin/requests/${requestId}/approve`, { notes });
-      setMessage({ type: 'success', text: 'Admin request approved successfully!' });
-      fetchAdminRequests();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to approve request' });
-    }
-  };
-
-  const denyRequest = async (requestId, notes = '') => {
-    try {
-      await axios.post(`${API}/admin/requests/${requestId}/deny`, { notes });
-      setMessage({ type: 'success', text: 'Admin request denied' });
-      fetchAdminRequests();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to deny request' });
-    }
-  };
-
-  const updateUserRole = async (userId, newRole) => {
-    try {
-      await axios.put(`${API}/admin/users/${userId}/role`, { role: newRole });
-      setMessage({ type: 'success', text: 'User role updated successfully!' });
-      fetchUsers();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to update user role' });
-    }
-  };
-
-  const updateUserStatus = async (userId, newStatus) => {
-    try {
-      await axios.put(`${API}/admin/users/${userId}/status`, { status: newStatus });
-      setMessage({ type: 'success', text: 'User status updated successfully!' });
-      fetchUsers();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to update user status' });
-    }
-  };
-
-  const bulkUserAction = async (action, value = null) => {
-    if (selectedUsers.length === 0) {
-      setMessage({ type: 'error', text: 'Please select users first' });
-      return;
-    }
-
-    try {
+  const handleCleanVirginState = async () => {
+    if (window.confirm('This will remove all data except your super admin account. This action cannot be undone. Continue?')) {
       setLoading(true);
-      await axios.post(`${API}/admin/users/bulk-action`, {
-        user_ids: selectedUsers,
-        action: action,
-        value: value
-      });
-      setMessage({ type: 'success', text: `Bulk ${action} completed successfully!` });
-      setSelectedUsers([]);
-      fetchUsers();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || `Failed to perform bulk ${action}` });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetUserPassword = async (userId) => {
-    try {
-      const response = await axios.post(`${API}/admin/users/${userId}/reset-password`, {
-        user_id: userId,
-        send_email: true
-      });
-      setMessage({ 
-        type: 'success', 
-        text: `Password reset! Temporary password: ${response.data.temporary_password}` 
-      });
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to reset password' });
-    }
-  };
-
-  const createGroup = async (groupData) => {
-    try {
-      setLoading(true);
-      await axios.post(`${API}/admin/groups`, groupData);
-      setMessage({ type: 'success', text: 'Group created successfully!' });
-      fetchGroups();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create group' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createTrainingVideo = async (videoData) => {
-    try {
-      setLoading(true);
-      await axios.post(`${API}/admin/training/videos`, videoData);
-      setMessage({ type: 'success', text: 'Training video created successfully!' });
-      fetchTrainingVideos();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create training video' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createMeeting = async (meetingData) => {
-    try {
-      setLoading(true);
-      await axios.post(`${API}/admin/meetings`, meetingData);
-      setMessage({ type: 'success', text: 'Meeting created successfully!' });
-      fetchMeetings();
-    } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create meeting' });
-    } finally {
+      const result = await cleanVirginState();
+      
+      if (result.success) {
+        setMessage({ type: 'success', text: 'System cleaned to virgin state successfully!' });
+        fetchSystemStats();
+        fetchGroups();
+        fetchUsers();
+        fetchMeetings();
+        fetchActivities();
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
       setLoading(false);
     }
   };
 
   const navigation = [
-    { id: 'dashboard', name: 'Dashboard', icon: '🏠' },
-    { id: 'users', name: 'User Management', icon: '👥' },
-    { id: 'groups', name: 'Group Management', icon: '🫂' },
-    { id: 'training', name: 'Training Center', icon: '🎓' },
-    { id: 'meetings', name: 'Meeting Management', icon: '📅' },
-    { id: 'finances', name: 'Financial Dashboard', icon: '💰' },
-    { id: 'analytics', name: 'System Analytics', icon: '📊' },
-    { id: 'admin-requests', name: 'Admin Requests', icon: '📋' },
-    { id: 'access-codes', name: 'Access Codes', icon: '🔑' },
-    { id: 'activities', name: 'System Activities', icon: '📝' },
-    { id: 'settings', name: 'Settings', icon: '⚙️' },
+    { id: 'overview', name: 'System Overview', icon: '🏠', color: 'bg-blue-500' },
+    { id: 'groups', name: 'Group Management', icon: '🫂', color: 'bg-purple-500' },
+    { id: 'users', name: 'User Management', icon: '👥', color: 'bg-green-500' },
+    { id: 'meetings', name: 'Meeting Management', icon: '📅', color: 'bg-indigo-500' },
+    { id: 'activities', name: 'System Activities', icon: '📝', color: 'bg-orange-500' },
+    { id: 'profile', name: 'My Profile', icon: '👤', color: 'bg-pink-500' },
+    { id: 'system', name: 'System Tools', icon: '⚙️', color: 'bg-red-500' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg flex flex-col">
-        <div className="p-6 border-b">
+      {/* Enhanced Sidebar */}
+      <div className="w-72 bg-white shadow-xl flex flex-col border-r border-gray-200">
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-purple-700">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-lg">👑</span>
+            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-2xl">👑</span>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">{user?.full_name}</h3>
-              <p className="text-sm text-purple-600 font-medium">Super Admin</p>
+              <h3 className="font-bold text-white text-lg">{user?.full_name}</h3>
+              <p className="text-purple-200 text-sm font-medium">Super Administrator</p>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
-            {navigation.map((item) => (
-              <li key={item.id}>
-                <button
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                    activeTab === item.id
-                      ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-500'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="font-medium">{item.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <nav className="flex-1 p-4 space-y-2">
+          {navigation.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
+                activeTab === item.id
+                  ? `${item.color} text-white shadow-lg transform scale-105`
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="font-medium">{item.name}</span>
+            </button>
+          ))}
         </nav>
 
-        <div className="p-4 border-t">
+        <div className="p-4 border-t border-gray-200">
           <button
             onClick={logout}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors duration-200"
           >
             <span className="text-xl">🚪</span>
             <span className="font-medium">Sign Out</span>
@@ -802,13 +687,16 @@ const SuperAdminDashboard = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <header className="bg-white shadow-sm border-b px-6 py-4">
+        <header className="bg-white shadow-sm border-b px-8 py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">
-              {navigation.find(item => item.id === activeTab)?.name || 'Dashboard'}
-            </h1>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {navigation.find(item => item.id === activeTab)?.name || 'Super Admin Portal'}
+              </h1>
+              <p className="text-gray-600 mt-1">Complete system control and management</p>
+            </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-purple-100 to-pink-200 px-4 py-2 rounded-full">
+              <div className="flex items-center space-x-2 bg-gradient-to-r from-purple-100 to-purple-200 px-4 py-2 rounded-full">
                 <span className="text-2xl">💰</span>
                 <span className="font-bold text-purple-700">{user?.coins?.toLocaleString() || 0} YHWH Coins</span>
               </div>
@@ -816,9 +704,9 @@ const SuperAdminDashboard = () => {
           </div>
         </header>
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-8">
           {message.text && (
-            <div className={`mb-4 px-4 py-3 rounded-lg ${
+            <div className={`mb-6 px-4 py-3 rounded-lg ${
               message.type === 'success' 
                 ? 'bg-green-50 border border-green-200 text-green-600' 
                 : 'bg-red-50 border border-red-200 text-red-600'
@@ -827,586 +715,58 @@ const SuperAdminDashboard = () => {
             </div>
           )}
 
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Users</p>
-                      <p className="text-3xl font-bold text-gray-900">{analytics?.users?.total || users.length}</p>
-                      <p className="text-xs text-gray-400">
-                        {analytics?.users?.active || 0} active • {analytics?.users?.inactive || 0} inactive
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">👥</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Groups</p>
-                      <p className="text-3xl font-bold text-gray-900">{analytics?.groups?.total || groups.length}</p>
-                      <p className="text-xs text-gray-400">Active groups</p>
-                    </div>
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">🫂</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Pending Requests</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {adminRequests.filter(req => req.status === 'pending').length}
-                      </p>
-                      <p className="text-xs text-gray-400">Admin requests</p>
-                    </div>
-                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">📋</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-amber-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Your Coins</p>
-                      <p className="text-3xl font-bold text-gray-900">{user?.coins?.toLocaleString() || 0}</p>
-                      <p className="text-xs text-gray-400">YHWH Kingdom Coins</p>
-                    </div>
-                    <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">💰</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Donations</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        ${donations?.total_amount?.toLocaleString() || '0'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {donations?.total_count || 0} donations
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">💝</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Training Videos</p>
-                      <p className="text-3xl font-bold text-gray-900">{trainingVideos.length}</p>
-                      <p className="text-xs text-gray-400">Active videos</p>
-                    </div>
-                    <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">🎓</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-pink-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Upcoming Meetings</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {meetings.filter(m => new Date(m.scheduled_date) > new Date()).length}
-                      </p>
-                      <p className="text-xs text-gray-400">Scheduled meetings</p>
-                    </div>
-                    <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">📅</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-teal-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Recent Activity</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {analytics?.activity?.recent_actions || activities.length}
-                      </p>
-                      <p className="text-xs text-gray-400">Last 7 days</p>
-                    </div>
-                    <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">📊</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Welcome to Super Admin Dashboard</h3>
-                <p className="text-gray-600 mb-4">
-                  You have complete control over the Glory of Elshaddai Christian Center Connect system.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-gray-900">Quick Actions</h4>
-                    <button 
-                      onClick={() => setActiveTab('admin-requests')}
-                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-xl">📋</span>
-                        <span className="font-medium">Review Admin Requests</span>
-                      </div>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('access-codes')}
-                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-xl">🔑</span>
-                        <span className="font-medium">Generate Access Codes</span>
-                      </div>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('users')}
-                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-xl">👥</span>
-                        <span className="font-medium">Manage Users</span>
-                      </div>
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-gray-900">System Status</h4>
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <p className="text-sm text-green-600">✅ System Running Normally</p>
-                    </div>
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-blue-600">ℹ️ All Services Online</p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-sm text-purple-600">👑 Super Admin Access Active</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'users' && (
-            <div className="space-y-6">
-              {/* Bulk Actions Bar */}
-              <div className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <span className="text-sm font-medium text-gray-700">
-                      {selectedUsers.length} user(s) selected
-                    </span>
-                    {selectedUsers.length > 0 && (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => bulkUserAction('activate')}
-                          className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
-                        >
-                          Activate
-                        </button>
-                        <button
-                          onClick={() => bulkUserAction('deactivate')}
-                          className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 transition-colors"
-                        >
-                          Deactivate
-                        </button>
-                        <button
-                          onClick={() => bulkUserAction('reset_password')}
-                          className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors"
-                        >
-                          Reset Passwords
-                        </button>
-                        <select
-                          onChange={(e) => e.target.value && bulkUserAction('change_role', e.target.value)}
-                          className="text-sm border border-gray-300 rounded px-2 py-1"
-                          defaultValue=""
-                        >
-                          <option value="">Change Role...</option>
-                          <option value="member">To Member</option>
-                          <option value="team_leader">To Team Leader</option>
-                          <option value="group_admin">To Group Admin</option>
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setSelectedUsers([])}
-                    className="text-gray-500 hover:text-gray-700 text-sm"
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-              </div>
-
-              {/* Users Table */}
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <input
-                            type="checkbox"
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedUsers(users.map(u => u.id));
-                              } else {
-                                setSelectedUsers([]);
-                              }
-                            }}
-                            checked={selectedUsers.length === users.length && users.length > 0}
-                          />
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points/Coins</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {users.map((userItem) => (
-                        <tr key={userItem.id} className={selectedUsers.includes(userItem.id) ? 'bg-purple-50' : ''}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={selectedUsers.includes(userItem.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedUsers([...selectedUsers, userItem.id]);
-                                } else {
-                                  setSelectedUsers(selectedUsers.filter(id => id !== userItem.id));
-                                }
-                              }}
-                            />
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{userItem.full_name}</div>
-                              <div className="text-sm text-gray-500">{userItem.email}</div>
-                              {userItem.phone && (
-                                <div className="text-xs text-gray-400">{userItem.phone}</div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <select
-                              value={userItem.role}
-                              onChange={(e) => updateUserRole(userItem.id, e.target.value)}
-                              className="text-sm border border-gray-300 rounded px-2 py-1"
-                            >
-                              <option value="member">Member</option>
-                              <option value="team_leader">Team Leader</option>
-                              <option value="group_admin">Group Admin</option>
-                              <option value="super_admin">Super Admin</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <select
-                              value={userItem.status}
-                              onChange={(e) => updateUserStatus(userItem.id, e.target.value)}
-                              className="text-sm border border-gray-300 rounded px-2 py-1"
-                            >
-                              <option value="active">Active</option>
-                              <option value="suspended">Suspended</option>
-                              <option value="locked">Locked</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <div className="flex items-center space-x-2">
-                              <span className="bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-xs">
-                                {userItem.points} pts
-                              </span>
-                              <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">
-                                {userItem.coins} coins
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                userItem.status === 'active' ? 'bg-green-100 text-green-800' :
-                                userItem.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {userItem.status}
-                              </span>
-                              <button
-                                onClick={() => resetUserPassword(userItem.id)}
-                                className="text-blue-600 hover:text-blue-800 text-xs"
-                                title="Reset Password"
-                              >
-                                🔑 Reset
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'admin-requests' && (
-            <div className="space-y-6">
-              {adminRequests.length === 0 ? (
-                <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                  <p className="text-gray-500">No admin requests found</p>
-                </div>
-              ) : (
-                adminRequests.map((request) => (
-                  <div key={request.id} className="bg-white rounded-xl shadow-sm p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{request.full_name}</h3>
-                        <p className="text-gray-600">{request.email}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        request.status === 'approved' ? 'bg-green-100 text-green-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {request.status.toUpperCase()}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-sm text-gray-500">Requested Role</p>
-                        <p className="font-medium">{request.requested_role.replace('_', ' ')}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Ministry Area</p>
-                        <p className="font-medium">{request.ministry_area}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Phone</p>
-                        <p className="font-medium">{request.phone}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Reference Contact</p>
-                        <p className="font-medium">{request.reference_contact}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Experience</p>
-                      <p className="font-medium">{request.experience}</p>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Reason for Request</p>
-                      <p className="font-medium">{request.reason}</p>
-                    </div>
-                    
-                    {request.status === 'pending' && (
-                      <div className="flex space-x-4">
-                        <button
-                          onClick={() => approveRequest(request.id)}
-                          className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => denyRequest(request.id)}
-                          className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
-                        >
-                          Deny
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {activeTab === 'access-codes' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Generate New Access Code</h3>
-                <form onSubmit={generateAccessCode} className="flex space-x-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last 4 Digits of Phone Number
-                    </label>
-                    <input
-                      type="text"
-                      value={codeForm.phone_last_four}
-                      onChange={(e) => setCodeForm({ phone_last_four: e.target.value })}
-                      maxLength={4}
-                      pattern="[0-9]{4}"
-                      placeholder="1234"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      required
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
-                    >
-                      Generate Code
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900">Access Codes</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone Last 4</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expires</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {accessCodes.map((code) => (
-                        <tr key={code.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
-                            {code.code}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {code.phone_last_four}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              code.used_at ? 'bg-gray-100 text-gray-800' :
-                              new Date(code.expires_at) < new Date() ? 'bg-red-100 text-red-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
-                              {code.used_at ? 'Used' : 
-                               new Date(code.expires_at) < new Date() ? 'Expired' : 'Active'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {new Date(code.created_at).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {new Date(code.expires_at).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+          {activeTab === 'overview' && (
+            <SystemOverviewContent systemStats={systemStats} onCleanSystem={handleCleanVirginState} />
           )}
 
           {activeTab === 'groups' && (
             <GroupManagementContent 
-              groups={groups}
+              groups={groups} 
               users={users}
-              createGroup={createGroup}
-              loading={loading}
+              API={API}
+              onUpdate={fetchGroups}
+              setMessage={setMessage}
             />
           )}
 
-          {activeTab === 'training' && (
-            <TrainingCenterContent 
-              trainingVideos={trainingVideos}
-              createTrainingVideo={createTrainingVideo}
-              loading={loading}
-            />
+          {activeTab === 'users' && (
+            <UserManagementContent users={users} API={API} onUpdate={fetchUsers} setMessage={setMessage} />
           )}
 
           {activeTab === 'meetings' && (
             <MeetingManagementContent 
-              meetings={meetings}
+              meetings={meetings} 
+              groups={groups} 
               users={users}
-              createMeeting={createMeeting}
-              loading={loading}
+              API={API}
+              onUpdate={fetchMeetings}
+              setMessage={setMessage}
             />
-          )}
-
-          {activeTab === 'finances' && (
-            <FinancialDashboardContent donations={donations} />
-          )}
-
-          {activeTab === 'analytics' && (
-            <SystemAnalyticsContent analytics={analytics} />
           )}
 
           {activeTab === 'activities' && (
             <SystemActivitiesContent activities={activities} users={users} />
           )}
 
-          {activeTab === 'settings' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h3>
-                <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                    <input
-                      type="password"
-                      value={passwordForm.currentPassword}
-                      onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                    <input
-                      type="password"
-                      value={passwordForm.newPassword}
-                      onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Must be 8+ characters with uppercase, lowercase, and numbers
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                    <input
-                      type="password"
-                      value={passwordForm.confirmPassword}
-                      onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
-                  >
-                    {loading ? 'Changing...' : 'Change Password'}
-                  </button>
-                </form>
-              </div>
-            </div>
+          {activeTab === 'profile' && (
+            <ProfileManagementContent 
+              user={user}
+              profileForm={profileForm}
+              setProfileForm={setProfileForm}
+              passwordForm={passwordForm}
+              setPasswordForm={setPasswordForm}
+              onProfileUpdate={handleProfileUpdate}
+              onPasswordChange={handlePasswordChange}
+              loading={loading}
+            />
+          )}
+
+          {activeTab === 'system' && (
+            <SystemToolsContent 
+              onCleanSystem={handleCleanVirginState}
+              systemStats={systemStats}
+              loading={loading}
+            />
           )}
         </main>
       </div>
@@ -1414,7 +774,866 @@ const SuperAdminDashboard = () => {
   );
 };
 
-// Regular User Dashboard (simplified for now)
+// Content Components
+const SystemOverviewContent = ({ systemStats, onCleanSystem }) => {
+  if (!systemStats) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500 hover:shadow-xl transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Users</p>
+              <p className="text-3xl font-bold text-gray-900">{systemStats.users.total}</p>
+              <p className="text-xs text-green-600">
+                {systemStats.users.active} active • {systemStats.users.total - systemStats.users.active} inactive
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">👥</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-purple-500 hover:shadow-xl transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Groups</p>
+              <p className="text-3xl font-bold text-gray-900">{systemStats.groups.total}</p>
+              <p className="text-xs text-purple-600">Active groups</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">🫂</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500 hover:shadow-xl transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Meetings</p>
+              <p className="text-3xl font-bold text-gray-900">{systemStats.meetings.total}</p>
+              <p className="text-xs text-green-600">
+                {systemStats.meetings.upcoming} upcoming • {systemStats.meetings.completed} completed
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">📅</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500 hover:shadow-xl transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Recent Activity</p>
+              <p className="text-3xl font-bold text-gray-900">{systemStats.activities.recent}</p>
+              <p className="text-xs text-orange-600">Last 7 days</p>
+            </div>
+            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+              <span className="text-2xl">📊</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* User Role Distribution */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-6">User Role Distribution</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-red-50 rounded-xl">
+            <div className="text-2xl mb-2">👑</div>
+            <p className="text-2xl font-bold text-red-600">{systemStats.users.super_admins}</p>
+            <p className="text-sm text-gray-600">Super Admins</p>
+          </div>
+          <div className="text-center p-4 bg-purple-50 rounded-xl">
+            <div className="text-2xl mb-2">⚡</div>
+            <p className="text-2xl font-bold text-purple-600">{systemStats.users.group_admins}</p>
+            <p className="text-sm text-gray-600">Group Admins</p>
+          </div>
+          <div className="text-center p-4 bg-blue-50 rounded-xl">
+            <div className="text-2xl mb-2">🎯</div>
+            <p className="text-2xl font-bold text-blue-600">{systemStats.users.team_leaders}</p>
+            <p className="text-sm text-gray-600">Team Leaders</p>
+          </div>
+          <div className="text-center p-4 bg-green-50 rounded-xl">
+            <div className="text-2xl mb-2">👤</div>
+            <p className="text-2xl font-bold text-green-600">{systemStats.users.members}</p>
+            <p className="text-sm text-gray-600">Members</p>
+          </div>
+        </div>
+      </div>
+
+      {/* System Actions */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-6">System Management</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button
+            onClick={onCleanSystem}
+            className="p-4 bg-red-50 hover:bg-red-100 rounded-xl border-2 border-red-200 hover:border-red-300 transition-all text-left"
+          >
+            <div className="text-2xl mb-2">🧹</div>
+            <h4 className="font-bold text-red-700 mb-1">Clean to Virgin State</h4>
+            <p className="text-sm text-red-600">Remove all data except super admin</p>
+          </button>
+          
+          <div className="p-4 bg-blue-50 rounded-xl border-2 border-blue-200 text-left">
+            <div className="text-2xl mb-2">💾</div>
+            <h4 className="font-bold text-blue-700 mb-1">System Backup</h4>
+            <p className="text-sm text-blue-600">Create full system backup</p>
+          </div>
+          
+          <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200 text-left">
+            <div className="text-2xl mb-2">🔧</div>
+            <h4 className="font-bold text-green-700 mb-1">System Health</h4>
+            <p className="text-sm text-green-600">All systems operational</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) => {
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [showGroupDetail, setShowGroupDetail] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  const [newGroup, setNewGroup] = useState({
+    name: '',
+    description: '',
+    group_type: 'Ministry',
+    privacy_setting: 'public',
+    max_members: '',
+    color_theme: '#6366f1',
+    meeting_location: '',
+    tags: []
+  });
+
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const groupData = {
+        ...newGroup,
+        max_members: newGroup.max_members ? parseInt(newGroup.max_members) : null,
+        tags: newGroup.tags.filter(tag => tag.trim())
+      };
+      
+      await axios.post(`${API}/groups`, groupData);
+      setMessage({ type: 'success', text: 'Group created successfully!' });
+      setNewGroup({
+        name: '',
+        description: '',
+        group_type: 'Ministry',
+        privacy_setting: 'public',
+        max_members: '',
+        color_theme: '#6366f1',
+        meeting_location: '',
+        tags: []
+      });
+      setShowCreateForm(false);
+      onUpdate();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create group' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId, groupName) => {
+    if (window.confirm(`Are you sure you want to delete "${groupName}"? This action cannot be undone.`)) {
+      try {
+        await axios.delete(`${API}/groups/${groupId}`);
+        setMessage({ type: 'success', text: 'Group deleted successfully!' });
+        onUpdate();
+      } catch (error) {
+        setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to delete group' });
+      }
+    }
+  };
+
+  const openGroupDetail = async (group) => {
+    try {
+      const response = await axios.get(`${API}/groups/${group.id}`);
+      setSelectedGroup(response.data);
+      setShowGroupDetail(true);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to load group details' });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Group Management</h2>
+          <p className="text-gray-600">Create and manage all groups</p>
+        </div>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="bg-purple-500 text-white px-6 py-3 rounded-xl hover:bg-purple-600 transition-colors shadow-lg"
+        >
+          <span className="flex items-center space-x-2">
+            <span>➕</span>
+            <span>Create New Group</span>
+          </span>
+        </button>
+      </div>
+
+      {/* Create Group Form */}
+      {showCreateForm && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 border">
+          <h3 className="text-xl font-bold mb-6">Create New Group</h3>
+          <form onSubmit={handleCreateGroup} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Group Name</label>
+                <input
+                  type="text"
+                  value={newGroup.name}
+                  onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="Enter group name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Group Type</label>
+                <select
+                  value={newGroup.group_type}
+                  onChange={(e) => setNewGroup({ ...newGroup, group_type: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="Ministry">Ministry</option>
+                  <option value="Age Group">Age Group</option>
+                  <option value="Service Team">Service Team</option>
+                  <option value="Leadership Circle">Leadership Circle</option>
+                  <option value="Interest Group">Interest Group</option>
+                  <option value="Bible Study">Bible Study</option>
+                  <option value="Worship Team">Worship Team</option>
+                  <option value="Outreach Team">Outreach Team</option>
+                </select>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+              <textarea
+                value={newGroup.description}
+                onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="Describe the purpose and goals of this group"
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Privacy Setting</label>
+                <select
+                  value={newGroup.privacy_setting}
+                  onChange={(e) => setNewGroup({ ...newGroup, privacy_setting: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                  <option value="invite_only">Invite Only</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Max Members (Optional)</label>
+                <input
+                  type="number"
+                  value={newGroup.max_members}
+                  onChange={(e) => setNewGroup({ ...newGroup, max_members: e.target.value })}
+                  min="1"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="Unlimited"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Color Theme</label>
+                <input
+                  type="color"
+                  value={newGroup.color_theme}
+                  onChange={(e) => setNewGroup({ ...newGroup, color_theme: e.target.value })}
+                  className="w-full h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Location</label>
+              <input
+                type="text"
+                value={newGroup.meeting_location}
+                onChange={(e) => setNewGroup({ ...newGroup, meeting_location: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="Physical location or virtual meeting room"
+              />
+            </div>
+            
+            <div className="flex space-x-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-purple-500 text-white px-6 py-3 rounded-xl hover:bg-purple-600 disabled:opacity-50 transition-colors shadow-lg"
+              >
+                {loading ? 'Creating...' : 'Create Group'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(false)}
+                className="bg-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Groups Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {groups.length === 0 ? (
+          <div className="col-span-full text-center py-12 bg-white rounded-2xl shadow-lg">
+            <div className="text-6xl mb-4">🫂</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">No Groups Created</h3>
+            <p className="text-gray-600 mb-6">Get started by creating your first group</p>
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="bg-purple-500 text-white px-6 py-3 rounded-xl hover:bg-purple-600 transition-colors"
+            >
+              Create First Group
+            </button>
+          </div>
+        ) : (
+          groups.map((group) => (
+            <div key={group.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-200 border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div 
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg"
+                    style={{ backgroundColor: group.color_theme }}
+                  >
+                    {group.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{group.name}</h3>
+                    <p className="text-sm text-gray-500">{group.group_type}</p>
+                  </div>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  group.privacy_setting === 'public' ? 'bg-green-100 text-green-800' :
+                  group.privacy_setting === 'private' ? 'bg-red-100 text-red-800' :
+                  'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {group.privacy_setting}
+                </span>
+              </div>
+              
+              {group.description && (
+                <p className="text-gray-600 mb-4 text-sm line-clamp-2">{group.description}</p>
+              )}
+              
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Members:</span>
+                  <span className="font-medium text-gray-900">
+                    {group.member_count || 0}
+                    {group.max_members && ` / ${group.max_members}`}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Leaders:</span>
+                  <span className="font-medium text-gray-900">{group.leaders?.length || 0}</span>
+                </div>
+                {group.meeting_location && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-500">Location:</span>
+                    <span className="font-medium text-gray-900 text-xs truncate">{group.meeting_location}</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => openGroupDetail(group)}
+                  className="flex-1 bg-purple-50 text-purple-600 px-3 py-2 rounded-lg text-sm hover:bg-purple-100 transition-colors font-medium"
+                >
+                  View Details
+                </button>
+                <button
+                  onClick={() => handleDeleteGroup(group.id, group.name)}
+                  className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Group Detail Modal */}
+      {showGroupDetail && selectedGroup && (
+        <GroupDetailModal 
+          group={selectedGroup}
+          users={users}
+          API={API}
+          onClose={() => setShowGroupDetail(false)}
+          onUpdate={onUpdate}
+          setMessage={setMessage}
+        />
+      )}
+    </div>
+  );
+};
+
+// Group Detail Modal Component
+const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) => {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: group.name,
+    description: group.description || '',
+    group_type: group.group_type,
+    privacy_setting: group.privacy_setting,
+    max_members: group.max_members || '',
+    color_theme: group.color_theme,
+    meeting_location: group.meeting_location || ''
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdateGroup = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const updateData = {
+        ...editForm,
+        max_members: editForm.max_members ? parseInt(editForm.max_members) : null
+      };
+      
+      await axios.put(`${API}/groups/${group.id}`, updateData);
+      setMessage({ type: 'success', text: 'Group updated successfully!' });
+      setEditMode(false);
+      onUpdate();
+      onClose();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to update group' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-6 border-b" style={{ backgroundColor: `${group.color_theme}15` }}>
+          <div className="flex items-center space-x-4">
+            <div 
+              className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg"
+              style={{ backgroundColor: group.color_theme }}
+            >
+              {group.name.charAt(0)}
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">{group.name}</h2>
+              <p className="text-gray-600">{group.group_type} • {group.member_count || 0} members</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
+            >
+              {editMode ? 'Cancel Edit' : 'Edit Group'}
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Content */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {editMode ? (
+            <form onSubmit={handleUpdateGroup} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Group Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Group Type</label>
+                  <select
+                    value={editForm.group_type}
+                    onChange={(e) => setEditForm({ ...editForm, group_type: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value="Ministry">Ministry</option>
+                    <option value="Age Group">Age Group</option>
+                    <option value="Service Team">Service Team</option>
+                    <option value="Leadership Circle">Leadership Circle</option>
+                    <option value="Interest Group">Interest Group</option>
+                    <option value="Bible Study">Bible Study</option>
+                    <option value="Worship Team">Worship Team</option>
+                    <option value="Outreach Team">Outreach Team</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Privacy Setting</label>
+                  <select
+                    value={editForm.privacy_setting}
+                    onChange={(e) => setEditForm({ ...editForm, privacy_setting: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                    <option value="invite_only">Invite Only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Members</label>
+                  <input
+                    type="number"
+                    value={editForm.max_members}
+                    onChange={(e) => setEditForm({ ...editForm, max_members: e.target.value })}
+                    min="1"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Color Theme</label>
+                  <input
+                    type="color"
+                    value={editForm.color_theme}
+                    onChange={(e) => setEditForm({ ...editForm, color_theme: e.target.value })}
+                    className="w-full h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Location</label>
+                <input
+                  type="text"
+                  value={editForm.meeting_location}
+                  onChange={(e) => setEditForm({ ...editForm, meeting_location: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-4">
+                <button
+                  type="button"
+                  onClick={() => setEditMode(false)}
+                  className="bg-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-purple-500 text-white px-6 py-3 rounded-xl hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                >
+                  {loading ? 'Updating...' : 'Update Group'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-6">
+              {/* Group Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium text-gray-700">Description</h4>
+                    <p className="text-gray-900">{group.description || 'No description provided'}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-700">Privacy Setting</h4>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      group.privacy_setting === 'public' ? 'bg-green-100 text-green-800' :
+                      group.privacy_setting === 'private' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {group.privacy_setting.charAt(0).toUpperCase() + group.privacy_setting.slice(1)}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium text-gray-700">Member Limits</h4>
+                    <p className="text-gray-900">
+                      {group.member_count || 0} / {group.max_members || 'Unlimited'} members
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-700">Meeting Location</h4>
+                    <p className="text-gray-900">{group.meeting_location || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-blue-600">{group.member_count || 0}</div>
+                  <div className="text-sm text-blue-600">Total Members</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-purple-600">{group.leaders?.length || 0}</div>
+                  <div className="text-sm text-purple-600">Leaders</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-green-600">{group.moderators?.length || 0}</div>
+                  <div className="text-sm text-green-600">Moderators</div>
+                </div>
+              </div>
+
+              {/* Group Creation Info */}
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <h4 className="font-medium text-gray-700 mb-2">Group Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Created:</span>
+                    <span className="ml-2 text-gray-900">
+                      {new Date(group.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Last Updated:</span>
+                    <span className="ml-2 text-gray-900">
+                      {new Date(group.updated_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Placeholder components for other sections
+const UserManagementContent = ({ users }) => (
+  <div className="text-center py-12">
+    <div className="text-6xl mb-4">👥</div>
+    <h3 className="text-xl font-bold text-gray-900 mb-2">User Management</h3>
+    <p className="text-gray-600">Manage {users.length} users in the system</p>
+  </div>
+);
+
+const MeetingManagementContent = ({ meetings }) => (
+  <div className="text-center py-12">
+    <div className="text-6xl mb-4">📅</div>
+    <h3 className="text-xl font-bold text-gray-900 mb-2">Meeting Management</h3>
+    <p className="text-gray-600">{meetings.length} meetings scheduled</p>
+  </div>
+);
+
+const SystemActivitiesContent = ({ activities }) => (
+  <div className="text-center py-12">
+    <div className="text-6xl mb-4">📝</div>
+    <h3 className="text-xl font-bold text-gray-900 mb-2">System Activities</h3>
+    <p className="text-gray-600">{activities.length} recent activities</p>
+  </div>
+);
+
+const ProfileManagementContent = ({ 
+  user, 
+  profileForm, 
+  setProfileForm, 
+  passwordForm, 
+  setPasswordForm, 
+  onProfileUpdate, 
+  onPasswordChange, 
+  loading 
+}) => (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    {/* Profile Information */}
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <h3 className="text-xl font-bold mb-6">Profile Information</h3>
+      <form onSubmit={onProfileUpdate} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+          <input
+            type="text"
+            value={profileForm.full_name}
+            onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+          <input
+            type="tel"
+            value={profileForm.phone}
+            onChange={(e) => setProfileForm({...profileForm, phone: e.target.value})}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+          <textarea
+            value={profileForm.bio}
+            onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
+            rows={3}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Emergency Contact</label>
+          <input
+            type="text"
+            value={profileForm.emergency_contact}
+            onChange={(e) => setProfileForm({...profileForm, emergency_contact: e.target.value})}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-purple-500 text-white py-3 rounded-xl hover:bg-purple-600 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Updating...' : 'Update Profile'}
+        </button>
+      </form>
+    </div>
+
+    {/* Password Change */}
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <h3 className="text-xl font-bold mb-6">Change Password</h3>
+      <form onSubmit={onPasswordChange} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+          <input
+            type="password"
+            value={passwordForm.currentPassword}
+            onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+          <input
+            type="password"
+            value={passwordForm.newPassword}
+            onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+          <input
+            type="password"
+            value={passwordForm.confirmPassword}
+            onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            required
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Changing...' : 'Change Password'}
+        </button>
+      </form>
+    </div>
+  </div>
+);
+
+const SystemToolsContent = ({ onCleanSystem, systemStats, loading }) => (
+  <div className="space-y-6">
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <h3 className="text-xl font-bold mb-6">System Maintenance Tools</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <button
+          onClick={onCleanSystem}
+          disabled={loading}
+          className="p-6 bg-red-50 hover:bg-red-100 rounded-xl border-2 border-red-200 hover:border-red-300 transition-all text-left disabled:opacity-50"
+        >
+          <div className="text-3xl mb-3">🧹</div>
+          <h4 className="font-bold text-red-700 mb-2">Clean to Virgin State</h4>
+          <p className="text-sm text-red-600">Remove all data except super admin account. Creates a fresh, empty system ready for production use.</p>
+        </button>
+        
+        <div className="p-6 bg-blue-50 rounded-xl border-2 border-blue-200 text-left">
+          <div className="text-3xl mb-3">💾</div>
+          <h4 className="font-bold text-blue-700 mb-2">System Backup</h4>
+          <p className="text-sm text-blue-600">Create comprehensive backup of all system data and configurations.</p>
+        </div>
+      </div>
+    </div>
+    
+    {systemStats && (
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-xl font-bold mb-6">Current System Status</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{systemStats.users.total}</div>
+            <div className="text-sm text-gray-600">Total Users</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">{systemStats.groups.total}</div>
+            <div className="text-sm text-gray-600">Active Groups</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{systemStats.meetings.total}</div>
+            <div className="text-sm text-gray-600">Total Meetings</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-orange-600">{systemStats.activities.recent}</div>
+            <div className="text-sm text-gray-600">Recent Activities</div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+// Regular User Dashboard (simplified)
 const RegularDashboard = () => {
   const { user, logout } = useAuth();
   
@@ -1434,9 +1653,9 @@ const RegularDashboard = () => {
       
       <main className="p-6">
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Dashboard Coming Soon</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Regular User Dashboard</h2>
           <p className="text-gray-600">
-            Your regular user dashboard is under construction. The super admin system is now active!
+            Your regular user features are coming soon. The super admin system is now fully operational!
           </p>
           <div className="mt-4">
             <p className="text-sm text-gray-500">Your role: <span className="font-medium">{user?.role}</span></p>
@@ -1485,820 +1704,12 @@ const App = () => {
   );
 };
 
-// Enhanced Content Components
-const GroupManagementContent = ({ groups, users, createGroup, loading }) => {
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newGroup, setNewGroup] = useState({
-    name: '',
-    description: '',
-    group_type: 'Ministry',
-    privacy_setting: 'public',
-    max_members: '',
-    meeting_schedule: ''
-  });
-
-  const handleCreateGroup = async (e) => {
-    e.preventDefault();
-    await createGroup(newGroup);
-    setNewGroup({
-      name: '',
-      description: '',
-      group_type: 'Ministry',
-      privacy_setting: 'public',
-      max_members: '',
-      meeting_schedule: ''
-    });
-    setShowCreateForm(false);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Group Management</h2>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
-        >
-          Create New Group
-        </button>
-      </div>
-
-      {showCreateForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Create New Group</h3>
-          <form onSubmit={handleCreateGroup} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
-                <input
-                  type="text"
-                  value={newGroup.name}
-                  onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Group Type</label>
-                <select
-                  value={newGroup.group_type}
-                  onChange={(e) => setNewGroup({ ...newGroup, group_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  <option value="Ministry">Ministry</option>
-                  <option value="Age Group">Age Group</option>
-                  <option value="Service Team">Service Team</option>
-                  <option value="Leadership Circle">Leadership Circle</option>
-                  <option value="Interest Group">Interest Group</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={newGroup.description}
-                onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Privacy Setting</label>
-                <select
-                  value={newGroup.privacy_setting}
-                  onChange={(e) => setNewGroup({ ...newGroup, privacy_setting: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
-                  <option value="invite_only">Invite Only</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max Members (Optional)</label>
-                <input
-                  type="number"
-                  value={newGroup.max_members}
-                  onChange={(e) => setNewGroup({ ...newGroup, max_members: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Schedule</label>
-                <input
-                  type="text"
-                  value={newGroup.meeting_schedule}
-                  onChange={(e) => setNewGroup({ ...newGroup, meeting_schedule: e.target.value })}
-                  placeholder="e.g., Sundays 10:00 AM"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-              </div>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Creating...' : 'Create Group'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {groups.map((group) => (
-          <div key={group.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">{group.name.charAt(0)}</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{group.name}</h3>
-                  <p className="text-sm text-gray-500">{group.group_type}</p>
-                </div>
-              </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                group.privacy_setting === 'public' ? 'bg-green-100 text-green-800' :
-                group.privacy_setting === 'private' ? 'bg-red-100 text-red-800' :
-                'bg-yellow-100 text-yellow-800'
-              }`}>
-                {group.privacy_setting}
-              </span>
-            </div>
-            
-            {group.description && (
-              <p className="text-gray-600 mb-4 text-sm">{group.description}</p>
-            )}
-            
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Members:</span>
-                <span className="font-medium">{group.members?.length || 0}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Leaders:</span>
-                <span className="font-medium">{group.leaders?.length || 0}</span>
-              </div>
-              {group.max_members && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Max Members:</span>
-                  <span className="font-medium">{group.max_members}</span>
-                </div>
-              )}
-              {group.meeting_schedule && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Schedule:</span>
-                  <span className="font-medium text-xs">{group.meeting_schedule}</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="flex space-x-2">
-                <button className="flex-1 bg-purple-50 text-purple-600 px-3 py-2 rounded-lg text-sm hover:bg-purple-100 transition-colors">
-                  Manage Members
-                </button>
-                <button className="flex-1 bg-gray-50 text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-100 transition-colors">
-                  Edit Group
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const TrainingCenterContent = ({ trainingVideos, createTrainingVideo, loading }) => {
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newVideo, setNewVideo] = useState({
-    title: '',
-    description: '',
-    category: 'General',
-    mandatory: false,
-    target_roles: []
-  });
-
-  const handleCreateVideo = async (e) => {
-    e.preventDefault();
-    await createTrainingVideo(newVideo);
-    setNewVideo({
-      title: '',
-      description: '',
-      category: 'General',
-      mandatory: false,
-      target_roles: []
-    });
-    setShowCreateForm(false);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Training Center</h2>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
-        >
-          Add Training Video
-        </button>
-      </div>
-
-      {showCreateForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Add Training Video</h3>
-          <form onSubmit={handleCreateVideo} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video Title</label>
-                <input
-                  type="text"
-                  value={newVideo.title}
-                  onChange={(e) => setNewVideo({ ...newVideo, title: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select
-                  value={newVideo.category}
-                  onChange={(e) => setNewVideo({ ...newVideo, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="General">General</option>
-                  <option value="New User">New User</option>
-                  <option value="Admin Training">Admin Training</option>
-                  <option value="Leadership">Leadership</option>
-                  <option value="Technical">Technical</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={newVideo.description}
-                onChange={(e) => setNewVideo({ ...newVideo, description: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={newVideo.mandatory}
-                  onChange={(e) => setNewVideo({ ...newVideo, mandatory: e.target.checked })}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700">Mandatory Training</span>
-              </label>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-indigo-500 text-white px-6 py-2 rounded-lg hover:bg-indigo-600 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Adding...' : 'Add Video'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {trainingVideos.map((video) => (
-          <div key={video.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                video.category === 'New User' ? 'bg-blue-100 text-blue-800' :
-                video.category === 'Admin Training' ? 'bg-purple-100 text-purple-800' :
-                video.category === 'Leadership' ? 'bg-green-100 text-green-800' :
-                video.category === 'Technical' ? 'bg-red-100 text-red-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {video.category}
-              </span>
-              {video.mandatory && (
-                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                  Required
-                </span>
-              )}
-            </div>
-            
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{video.title}</h3>
-            {video.description && (
-              <p className="text-gray-600 mb-4 text-sm">{video.description}</p>
-            )}
-            
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-              <span className="text-sm text-gray-500">
-                Created: {new Date(video.created_at).toLocaleDateString()}
-              </span>
-              <div className="flex space-x-2">
-                <button className="text-indigo-600 hover:text-indigo-800 text-sm">
-                  Edit
-                </button>
-                <button className="text-red-600 hover:text-red-800 text-sm">
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const MeetingManagementContent = ({ meetings, users, createMeeting, loading }) => {
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newMeeting, setNewMeeting] = useState({
-    title: '',
-    description: '',
-    meeting_type: 'Admin',
-    scheduled_date: '',
-    duration_minutes: 60,
-    location: '',
-    agenda: '',
-    attendees: [],
-    required_attendees: []
-  });
-
-  const handleCreateMeeting = async (e) => {
-    e.preventDefault();
-    const meetingData = {
-      ...newMeeting,
-      scheduled_date: new Date(newMeeting.scheduled_date).toISOString()
-    };
-    await createMeeting(meetingData);
-    setNewMeeting({
-      title: '',
-      description: '',
-      meeting_type: 'Admin',
-      scheduled_date: '',
-      duration_minutes: 60,
-      location: '',
-      agenda: '',
-      attendees: [],
-      required_attendees: []
-    });
-    setShowCreateForm(false);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Meeting Management</h2>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="bg-pink-500 text-white px-4 py-2 rounded-lg hover:bg-pink-600 transition-colors"
-        >
-          Schedule Meeting
-        </button>
-      </div>
-
-      {showCreateForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Schedule New Meeting</h3>
-          <form onSubmit={handleCreateMeeting} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title</label>
-                <input
-                  type="text"
-                  value={newMeeting.title}
-                  onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Type</label>
-                <select
-                  value={newMeeting.meeting_type}
-                  onChange={(e) => setNewMeeting({ ...newMeeting, meeting_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                >
-                  <option value="Admin">Admin</option>
-                  <option value="Ministry">Ministry</option>
-                  <option value="Leadership">Leadership</option>
-                  <option value="All-Hands">All-Hands</option>
-                  <option value="Emergency">Emergency</option>
-                </select>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
-                <input
-                  type="datetime-local"
-                  value={newMeeting.scheduled_date}
-                  onChange={(e) => setNewMeeting({ ...newMeeting, scheduled_date: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                <input
-                  type="number"
-                  value={newMeeting.duration_minutes}
-                  onChange={(e) => setNewMeeting({ ...newMeeting, duration_minutes: parseInt(e.target.value) })}
-                  min="15"
-                  step="15"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                <input
-                  type="text"
-                  value={newMeeting.location}
-                  onChange={(e) => setNewMeeting({ ...newMeeting, location: e.target.value })}
-                  placeholder="Room, Zoom link, etc."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={newMeeting.description}
-                onChange={(e) => setNewMeeting({ ...newMeeting, description: e.target.value })}
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Agenda</label>
-              <textarea
-                value={newMeeting.agenda}
-                onChange={(e) => setNewMeeting({ ...newMeeting, agenda: e.target.value })}
-                rows={3}
-                placeholder="Meeting agenda and topics..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-              />
-            </div>
-            
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-pink-500 text-white px-6 py-2 rounded-lg hover:bg-pink-600 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Scheduling...' : 'Schedule Meeting'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {meetings.map((meeting) => (
-          <div key={meeting.id} className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{meeting.title}</h3>
-                <p className="text-sm text-gray-500">{meeting.meeting_type} Meeting</p>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                new Date(meeting.scheduled_date) > new Date() 
-                  ? 'bg-blue-100 text-blue-800' 
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
-                {new Date(meeting.scheduled_date) > new Date() ? 'Upcoming' : 'Past'}
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">Date & Time:</span>
-                <p className="font-medium">
-                  {new Date(meeting.scheduled_date).toLocaleDateString()} at {' '}
-                  {new Date(meeting.scheduled_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-500">Duration:</span>
-                <p className="font-medium">{meeting.duration_minutes} minutes</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Location:</span>
-                <p className="font-medium">{meeting.location || 'TBD'}</p>
-              </div>
-            </div>
-            
-            {meeting.description && (
-              <div className="mt-4">
-                <span className="text-gray-500 text-sm">Description:</span>
-                <p className="text-sm mt-1">{meeting.description}</p>
-              </div>
-            )}
-            
-            {meeting.agenda && (
-              <div className="mt-4">
-                <span className="text-gray-500 text-sm">Agenda:</span>
-                <p className="text-sm mt-1 whitespace-pre-line">{meeting.agenda}</p>
-              </div>
-            )}
-            
-            <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-              <span className="text-sm text-gray-500">
-                Attendees: {meeting.attendees?.length || 0} invited
-              </span>
-              <div className="flex space-x-2">
-                <button className="text-pink-600 hover:text-pink-800 text-sm">
-                  Edit
-                </button>
-                <button className="text-gray-600 hover:text-gray-800 text-sm">
-                  Manage Attendees
-                </button>
-                <button className="text-red-600 hover:text-red-800 text-sm">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const FinancialDashboardContent = ({ donations }) => {
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Financial Dashboard</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Donations</p>
-              <p className="text-3xl font-bold text-gray-900">
-                ${donations?.total_amount?.toLocaleString() || '0'}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">💝</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Donors</p>
-              <p className="text-3xl font-bold text-gray-900">{donations?.total_count || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">👥</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Average Donation</p>
-              <p className="text-3xl font-bold text-gray-900">
-                ${Math.round(donations?.average_donation || 0).toLocaleString()}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">📊</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Recent (30 days)</p>
-              <p className="text-3xl font-bold text-gray-900">
-                ${donations?.recent_amount?.toLocaleString() || '0'}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">📈</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {donations?.categories && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Donations by Category</h3>
-          <div className="space-y-4">
-            {Object.entries(donations.categories).map(([category, amount]) => (
-              <div key={category} className="flex items-center justify-between">
-                <span className="text-gray-700">{category}</span>
-                <div className="flex items-center space-x-2">
-                  <div className="w-32 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-500 h-2 rounded-full"
-                      style={{ 
-                        width: `${(amount / donations.total_amount) * 100}%` 
-                      }}
-                    ></div>
-                  </div>
-                  <span className="font-medium text-gray-900">
-                    ${amount.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const SystemAnalyticsContent = ({ analytics }) => {
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">System Analytics</h2>
-      
-      {analytics && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">User Statistics</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Total Users</span>
-                  <span className="font-bold text-2xl text-purple-600">{analytics.users.total}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Active Users</span>
-                  <span className="font-bold text-lg text-green-600">{analytics.users.active}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">New (7 days)</span>
-                  <span className="font-bold text-lg text-blue-600">{analytics.users.recent}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Inactive</span>
-                  <span className="font-bold text-lg text-red-600">{analytics.users.inactive}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Group Statistics</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Total Groups</span>
-                  <span className="font-bold text-2xl text-blue-600">{analytics.groups.total}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Statistics</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Recent Actions</span>
-                  <span className="font-bold text-2xl text-teal-600">{analytics.activity.recent_actions}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">User Growth Chart</h3>
-            <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-              <p className="text-gray-500">Chart visualization would go here</p>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
-
-const SystemActivitiesContent = ({ activities, users }) => {
-  const getUserName = (userId) => {
-    const user = users.find(u => u.id === userId);
-    return user ? user.full_name : 'Unknown User';
-  };
-
-  const getActionIcon = (action) => {
-    switch (action) {
-      case 'create_group': return '🫂';
-      case 'bulk_activate': return '✅';
-      case 'bulk_deactivate': return '❌';
-      case 'reset_password': return '🔑';
-      case 'group_membership_add': return '➕';
-      case 'group_membership_remove': return '➖';
-      default: return '📝';
-    }
-  };
-
-  const getActionDescription = (activity) => {
-    switch (activity.action) {
-      case 'create_group':
-        return `Created group "${activity.details?.group_name}"`;
-      case 'bulk_activate':
-        return 'Activated multiple user accounts';
-      case 'bulk_deactivate':
-        return 'Deactivated multiple user accounts';
-      case 'reset_password':
-        return `Reset password for ${activity.details?.target_user}`;
-      case 'group_membership_add':
-        return 'Added members to a group';
-      case 'group_membership_remove':
-        return 'Removed members from a group';
-      default:
-        return activity.action.replace('_', ' ');
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">System Activities</h2>
-      
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Activities</h3>
-        </div>
-        <div className="divide-y divide-gray-200">
-          {activities.length === 0 ? (
-            <div className="px-6 py-8 text-center text-gray-500">
-              No recent activities found
-            </div>
-          ) : (
-            activities.map((activity) => (
-              <div key={activity.id} className="px-6 py-4 flex items-center space-x-4">
-                <div className="flex-shrink-0">
-                  <span className="text-2xl">{getActionIcon(activity.action)}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900">
-                      {getUserName(activity.user_id)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(activity.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    {getActionDescription(activity)}
-                  </p>
-                  {activity.target_type && (
-                    <p className="text-xs text-gray-400">
-                      Target: {activity.target_type}
-                      {activity.ip_address && ` • IP: ${activity.ip_address}`}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // Dashboard Router Component
 const Dashboard = () => {
   const { user } = useAuth();
   
   if (user?.role === 'super_admin') {
-    return <SuperAdminDashboard />;
+    return <SuperAdminPortal />;
   }
   
   return <RegularDashboard />;
