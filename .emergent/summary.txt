@@ -1,0 +1,60 @@
+<analysis>
+The AI engineer iteratively developed the Glory of Elshaddai application. Initially, an MVP and Super Admin features were implemented. Following a major user request, the engineer first integrated Daily.co for video conferencing, then switched to Agora, fulfilling extensive requirements including scripture display and live streaming. Concurrently, the engineer implemented Super Admin portal switching and the comprehensive Time Tracking & Punctuality System (Phase 2). The most recent efforts focused on debugging and enhancing the Group Management system, ensuring all buttons (View Details, Delete, Create) are functional, resolving Agora video conferencing errors, establishing proper user roles, and refining group management and member assignment. This demonstrates a structured approach to evolving a complex application based on continuous user feedback and feature prioritization.
+</analysis>
+
+<product_requirements>
+The Glory of Elshaddai Christian Center Connect application is a platform for youth group management. Key features include email/password authentication, basic roles, chat, task management, and a reward system (YHWH Kingdom Coins). The Super Admin dashboard provides email verification, user management, admin approval, and basic security. An enhanced Super Admin dashboard offers advanced user/group management, a financial dashboard, and conceptual features for training videos, meetings, and analytics. A core requirement is a Virgin App State upon delivery.
+
+Recent requirements included a comprehensive **Video Conferencing System** (initially Daily.co, then replaced by Agora) supporting up to 1,000 participants, cloud recording, Scripture verse display, live streaming to Facebook/YouTube, and a TV news-style presentation interface. The **Time Tracking & Punctuality System** (Phase 2) introduced advanced task management with scheduling, rewards, penalties, punch-in/out functionality, strict punctuality enforcement (15-min grace period), real-time monitoring, and comprehensive analytics. Additionally, **Super Admin Portal Switching** (Admin/User view) and **Group Management fixes** including functional buttons (View Details, Delete, Create), Agora error resolution, proper user roles, and enhanced meeting integration were critical.
+</product_requirements>
+
+<key_technical_concepts>
+- **React.js:** Frontend framework with Shadcn UI and Tailwind CSS.
+- **FastAPI:** Python backend for API development.
+- **MongoDB:** NoSQL database.
+- **JWT:** JSON Web Tokens for authentication.
+- **Axios:** HTTP client for frontend API calls.
+- **Agora.io:** WebRTC-based video conferencing SDK.
+- **agora-token-builder:** Python library for Agora token generation.
+- **Geopy:** Python library for geospatial calculations.
+- **Supervisor:** Process control system.
+</key_technical_concepts>
+
+<code_architecture>
+The application uses a full-stack architecture with a React frontend and a FastAPI backend, managed by Supervisor.
+
+
+
+-   ****:
+    -   **Importance:** The core of the backend, handling API routes, database interactions, authentication, user/group management, and now video conferencing and time tracking logic.
+    -   **Changes Made:** Initial authentication, Super Admin features, and user/group management were extended. Daily.co integration was added and then fully replaced by Agora.io endpoints for video token generation and room management. New models and API endpoints for task creation, attendance tracking, and group member management (add/remove) were implemented, integrating  for location checks.  was added to .
+-   ****:
+    -   **Importance:** Defines the main React application, including routing, authentication context, and the structure of the Super Admin dashboard and user views.
+    -   **Changes Made:** Expanded significantly to incorporate the Super Admin dashboard, Video Conference and Time Tracking navigation items. The  component was first implemented with Daily.co, then entirely rewritten for Agora, integrating Agora App Builder SDK with custom church-specific features. Super Admin portal switching was added with  state, a toggle, and conditional rendering. The  was introduced to show member-specific content, including time tracking.  and  were updated for enhanced group CRUD operations, member management, and Agora video meeting initiation.
+-   ****: Importance: Contains global and component-specific styling. Changes: Updated to support new UI elements and layouts.
+-   ****: Importance: Contains reusable Shadcn UI components. Changes: Utilized by  and other components.
+-   ****: (Temporary file)
+    -   **Importance:** A temporary file used to develop the  component, before its content was integrated into .
+    -   **Changes Made:** Contained the full React component logic for task creation, display, punch-in/out, and related UI for the Time Tracking system.
+</code_architecture>
+
+<pending_tasks>
+-   **Phase 3: Presentation Preparation System:** Presentation builder, upload presentations, Scripture verse display.
+-   **Phase 4: Live Streaming & Sharing Integration:** Multi-platform broadcasting, post-meeting sharing.
+-   **Phase 5: Cloud Storage System:** Implement 7TB storage capacity.
+-   **Phase 6: Super Admin Database Management:** Direct database viewing/editing, cache management.
+</pending_tasks>
+
+<current_work>
+The AI engineer has just completed a series of critical fixes and enhancements to the application. The **Daily.co video conferencing integration has been completely replaced with Agora.io**, using the provided  App ID and  X-RapidAPI-Key. This involved updating both backend () for token generation and frontend () with the Agora App Builder SDK, incorporating church-specific features like Scripture display and presentation layouts.
+
+The **Phase 2: Time Tracking & Punctuality System** has also been largely implemented. This includes backend APIs for task management and attendance, utilizing  for location checks. On the frontend, new navigation items and a  component were added, along with corresponding UI updates for both Admin and Regular Member views.
+
+A significant feature, **Super Admin Portal Switching**, has been implemented, allowing Super Admins to seamlessly toggle between a full administrative dashboard and a simplified regular member view, with a clear header toggle and conditional sidebar rendering.
+
+Most recently, the engineer addressed a user-reported bug in the **Group Management dashboard**. This involved fixing non-functional View Details, Delete, and Create New Group buttons. The  and  components in  were enhanced to provide comprehensive group management functionalities, including member assignment and a working video meeting initiation process integrated with Agora, ensuring proper API calls and user role assignments. Backend endpoints for group member management were also added to . The system has undergone internal testing, and screenshots confirm the group management and portal switching functionalities are operational.
+</current_work>
+
+<optional_next_step>
+Conduct comprehensive backend and frontend testing of the recently fixed Group Management and Agora video conferencing features.
+</optional_next_step>

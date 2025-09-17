@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 class VideoConferencingTester:
-    def __init__(self, base_url="https://ecclesia-hub.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://ministry-platform-2.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.tests_run = 0
