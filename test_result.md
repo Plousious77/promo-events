@@ -176,6 +176,21 @@ Previous context: Implement Phase 2: Video Conferencing System with WebRTC-based
           comment: "✅ GROUP INTEGRATION VERIFIED: Video rooms properly associate with groups via group_id parameter. Group filtering works correctly in GET /api/video-rooms/?group_id={id} endpoint. Role-based access control implemented - Super Admin and Group Admin permissions working. Group membership validation in place for room access. Integration with existing group management system is seamless."
 
 ## frontend:
+  - task: "Fix AgoraUIKit undefined role property error"
+    implemented: true
+    working: "unknown"
+    file: "/app/frontend/src/App.js"
+    stuck_count: 0
+    priority: "critical"
+    needs_retesting: true
+    status_history:
+        - working: false
+          agent: "user"
+          comment: "User reported AgoraUIKit error: 'Cannot read properties of undefined (reading 'role')'. This is preventing video conferencing UI from working despite backend being fixed."
+        - working: "unknown"
+          agent: "main"
+          comment: "FIXED: Added role property to agoraConfig object. Implemented church role mapping (super_admin/group_admin/team_leader -> 'host', member -> 'audience'). Updated handleJoinRoom to include role validation and fallback. Changed AgoraUIKit props structure from connectionData to rtcProps. Added user safety check and loading state. Applied fixes to VideoConferenceContent component lines 2573-2870."
+
   - task: "Daily.co React hooks integration"
     implemented: true
     working: true
