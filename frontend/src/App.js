@@ -3012,48 +3012,186 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     );
   }
 
-  const handleJoinRoom = async (room) => {
-    setLoading(true);
-    try {
-      // Determine user's Agora role based on church role
-      const userAgoraRole = getUserAgoraRole(user?.role);
-      
-      // Generate Agora token
-      const tokenResponse = await axios.post(`${API}/agora/token`, {
-        channel_name: room.channel_name,
-        uid: Math.floor(Math.random() * 10000) + 1000,
-        role: userAgoraRole, // Use the mapped role
-        expire_time: 7200
-      });
+  // In-Meeting Interface
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      {/* Meeting Header */}
+      <div className="bg-gradient-to-r from-purple-800 to-blue-800 rounded-xl p-4 mb-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold">{channelData.title}</h2>
+            <p className="text-purple-200">Channel: {channelData.channel_name}</p>
+            {channelData.pstn_number && (
+              <p className="text-sm text-purple-200">📞 Dial-in: {channelData.pstn_number} • Code: {channelData.pstn_dtmf}</p>
+            )}
+          </div>
+          
+          <div className="flex space-x-3">
+            {isStreaming && <span className="bg-red-500 px-3 py-1 rounded-full text-sm">🔴 LIVE</span>}
+            {isRecording && <span className="bg-red-500 px-3 py-1 rounded-full text-sm">● REC</span>}
+            <button 
+              onClick={endMeeting}
+              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors"
+            >
+              Leave Meeting
+            </button>
+          </div>
+        </div>
+      </div>
 
-      const config = {
-        appId: process.env.REACT_APP_AGORA_APP_ID || 'default-application_10499703',
-        channel: room.channel_name,
-        token: tokenResponse.data.token,
-        uid: tokenResponse.data.uid,
-        role: userAgoraRole, // This must never be undefined
-      };
+      {/* Church Service Controls */}
+      {joinData?.isHost && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+          {/* Recording Controls */}
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h3 className="font-semibold mb-3">Recording</h3>
+            <div className="space-y-2">
+              <button 
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isRecording 
+                    ? 'bg-red-600 hover:bg-red-700' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {isRecording ? 'Stop Recording' : 'Start Recording'}
+              </button>
+            </div>
+          </div>
 
-      // Validate config before setting
-      if (!config.role || (config.role !== 'host' && config.role !== 'audience')) {
-        console.error('Invalid Agora role detected:', config.role);
-        config.role = 'audience'; // Fallback to audience
-      }
+          {/* Layout Controls */}
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h3 className="font-semibold mb-3">Layout</h3>
+            <div className="space-y-2">
+              <button 
+                onClick={() => setRecordingLayout('presenter')}
+                className="w-full bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Sermon Layout
+              </button>
+              <button 
+                onClick={() => setRecordingLayout('normal')}
+                className="w-full bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Group Discussion
+              </button>
+            </div>
+          </div>
 
-      setAgoraConfig(config);
-      setActiveRoom(room);
-      setVideoCall(true);
-      
-      setMessage({ type: 'success', text: 'Joined church video conference successfully!' });
-    } catch (error) {
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.detail || 'Failed to join video room' 
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+          {/* Streaming Controls */}
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h3 className="font-semibold mb-3">Live Streaming</h3>
+            <div className="space-y-2">
+              <button 
+                onClick={() => setIsStreaming(!isStreaming)}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isStreaming 
+                    ? 'bg-red-600 hover:bg-red-700' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isStreaming ? 'Stop Streaming' : 'Start Streaming'}
+              </button>
+            </div>
+          </div>
+
+          {/* Camera Controls */}
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h3 className="font-semibold mb-3">Camera/Input</h3>
+            <select 
+              onChange={(e) => selectCameraDevice(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">Select Camera/Input</option>
+              <option value="laptop-camera">Laptop Camera</option>
+              <option value="usb-switcher">USB Video Switcher</option>
+              <option value="external-camera">External Camera</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Scripture Display Controls */}
+      <div className="bg-purple-900 rounded-xl p-4 mb-6">
+        <h3 className="text-lg font-semibold mb-3">Scripture Display</h3>
+        <div className="flex space-x-3">
+          <input
+            type="text"
+            placeholder="Display scripture verse (e.g., John 3:16 - For God so loved the world...)"
+            value={currentScripture}
+            onChange={(e) => setCurrentScripture(e.target.value)}
+            className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+          />
+          <button 
+            onClick={() => updateScriptureDisplay(currentScripture)}
+            className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg transition-colors font-medium"
+          >
+            Update Scripture
+          </button>
+        </div>
+      </div>
+
+      {/* Main Video Area */}
+      <div className="relative bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
+        {joinData && (
+          <AgoraUIKit 
+            rtcProps={{
+              appId: AGORA_CONFIG.projectId,
+              channel: joinData.channel_name,
+              token: joinData.main_user?.rtc || '',
+              uid: joinData.main_user?.uid || 0,
+              role: joinData.isHost ? 'host' : 'audience',
+              enableScreensharing: true,
+              enableWhiteboard: true
+            }}
+            callbacks={{
+              EndCall: () => endMeeting(),
+              UserJoined: (uid) => console.log('User joined:', uid),
+              UserLeft: (uid) => console.log('User left:', uid)
+            }}
+            styleProps={{
+              localBtnContainer: {
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                borderRadius: '12px',
+                padding: '10px'
+              },
+              maxViewContainer: {
+                borderRadius: '12px'
+              }
+            }}
+          />
+        )}
+
+        {/* Scripture Overlay */}
+        {currentScripture && (
+          <div className="absolute bottom-20 left-8 right-8 bg-black bg-opacity-80 text-white p-4 rounded-lg text-center z-10">
+            <p className="text-xl font-light font-serif">{currentScripture}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Meeting Info */}
+      <div className="mt-6 bg-blue-900 rounded-xl p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3 className="font-semibold mb-2">📺 Professional Church Broadcasting</h3>
+            <p className="text-sm text-blue-200">
+              Use the scripture display to share verses with your congregation. 
+              Start live streaming to reach members who cannot attend in person.
+            </p>
+          </div>
+          
+          <div>
+            <h3 className="font-semibold mb-2">Meeting Details</h3>
+            <p className="text-sm text-blue-200">Channel: {channelData.channel_name}</p>
+            {joinData?.isHost && (
+              <p className="text-sm text-blue-200">You are the meeting host</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const handleLeaveRoom = () => {
     setVideoCall(false);
