@@ -1444,10 +1444,15 @@ const GroupManagementContent = ({ groups, users, API, onUpdate, setMessage }) =>
   );
 };
 
-// Group Detail Modal Component
-const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) => {
+// Enhanced Group Detail Modal Component
+const EnhancedGroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [editMode, setEditMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+
   const [editForm, setEditForm] = useState({
     name: group.name,
     description: group.description || '',
@@ -1457,7 +1462,32 @@ const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) 
     color_theme: group.color_theme,
     meeting_location: group.meeting_location || ''
   });
-  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchGroupMembers();
+    fetchAvailableUsers();
+  }, []);
+
+  const fetchGroupMembers = async () => {
+    try {
+      const response = await axios.get(`${API}/groups/${group.id}/members`);
+      setGroupMembers(response.data);
+    } catch (error) {
+      console.error('Failed to fetch group members:', error);
+    }
+  };
+
+  const fetchAvailableUsers = async () => {
+    try {
+      // Get users not in this group
+      const response = await axios.get(`${API}/users`);
+      const allUsers = response.data;
+      const currentMemberIds = groupMembers.map(member => member.id);
+      setAvailableUsers(allUsers.filter(user => !currentMemberIds.includes(user.id)));
+    } catch (error) {
+      console.error('Failed to fetch available users:', error);
+    }
+  };
 
   const handleUpdateGroup = async (e) => {
     e.preventDefault();
@@ -1481,10 +1511,100 @@ const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) 
     }
   };
 
+  const handleAddMembers = async () => {
+    if (selectedUsers.length === 0) {
+      setMessage({ type: 'error', text: 'Please select users to add' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.post(`${API}/groups/${group.id}/members`, {
+        user_ids: selectedUsers
+      });
+      setMessage({ 
+        type: 'success', 
+        text: `Added ${selectedUsers.length} member(s) to ${group.name}` 
+      });
+      setSelectedUsers([]);
+      fetchGroupMembers();
+      fetchAvailableUsers();
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to add members' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberId, memberName) => {
+    if (window.confirm(`Remove ${memberName} from ${group.name}?`)) {
+      try {
+        await axios.delete(`${API}/groups/${group.id}/members/${memberId}`);
+        setMessage({ type: 'success', text: `${memberName} removed from group` });
+        fetchGroupMembers();
+        fetchAvailableUsers();
+      } catch (error) {
+        setMessage({ 
+          type: 'error', 
+          text: error.response?.data?.detail || 'Failed to remove member' 
+        });
+      }
+    }
+  };
+
+  const startGroupVideoMeeting = async () => {
+    try {
+      setLoading(true);
+      
+      const roomData = {
+        room_name: `${group.name} Group Meeting`,
+        service_type: 'group_meeting',
+        max_participants: Math.min(group.max_members || 200, 1000),
+        enable_recording: true,
+        enable_streaming: false,
+        group_id: group.id
+      };
+      
+      const response = await axios.post(`${API}/church-video/create`, roomData);
+      
+      const tokenResponse = await axios.post(`${API}/agora/token`, {
+        channel_name: response.data.channel_name,
+        uid: Math.floor(Math.random() * 10000) + 1000,
+        role: 'host',
+        expire_time: 7200
+      });
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Video meeting started for ${group.name}! Channel: ${response.data.channel_name}` 
+      });
+      
+    } catch (error) {
+      console.error('Video meeting creation failed:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to start video meeting' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const scheduleGroupMeeting = async () => {
+    // This would open a meeting scheduling interface
+    setMessage({ 
+      type: 'info', 
+      text: 'Meeting scheduling interface will be implemented in the next update' 
+    });
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        {/* Modal Header */}
+      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+        {/* Enhanced Modal Header */}
         <div className="flex items-center justify-between p-6 border-b" style={{ backgroundColor: `${group.color_theme}15` }}>
           <div className="flex items-center space-x-4">
             <div 
@@ -1495,10 +1615,23 @@ const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) 
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{group.name}</h2>
-              <p className="text-gray-600">{group.group_type} • {group.member_count || 0} members</p>
+              <p className="text-gray-600">{group.group_type} • {groupMembers.length} members</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={startGroupVideoMeeting}
+              disabled={loading}
+              className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+            >
+              📹 Start Meeting
+            </button>
+            <button
+              onClick={scheduleGroupMeeting}
+              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              📅 Schedule
+            </button>
             <button
               onClick={() => setEditMode(!editMode)}
               className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
@@ -1514,8 +1647,33 @@ const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) 
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="border-b">
+          <nav className="flex space-x-8 px-6">
+            {[
+              { id: 'overview', name: 'Overview', icon: '📊' },
+              { id: 'members', name: 'Members', icon: '👥' },
+              { id: 'meetings', name: 'Meetings', icon: '📅' },
+              { id: 'activities', name: 'Activities', icon: '📝' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id
+                    ? 'border-purple-500 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <span className="mr-2">{tab.icon}</span>
+                {tab.name}
+              </button>
+            ))}
+          </nav>
+        </div>
+
         {/* Modal Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           {editMode ? (
             <form onSubmit={handleUpdateGroup} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1621,72 +1779,158 @@ const GroupDetailModal = ({ group, users, API, onClose, onUpdate, setMessage }) 
             </form>
           ) : (
             <div className="space-y-6">
-              {/* Group Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium text-gray-700">Description</h4>
-                    <p className="text-gray-900">{group.description || 'No description provided'}</p>
+              {/* Overview Tab */}
+              {activeTab === 'overview' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-medium text-gray-700">Description</h4>
+                        <p className="text-gray-900">{group.description || 'No description provided'}</p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-gray-700">Privacy Setting</h4>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          group.privacy_setting === 'public' ? 'bg-green-100 text-green-800' :
+                          group.privacy_setting === 'private' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {group.privacy_setting.charAt(0).toUpperCase() + group.privacy_setting.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-medium text-gray-700">Member Limits</h4>
+                        <p className="text-gray-900">
+                          {groupMembers.length} / {group.max_members || 'Unlimited'} members
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-gray-700">Meeting Location</h4>
+                        <p className="text-gray-900">{group.meeting_location || 'Not specified'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-medium text-gray-700">Privacy Setting</h4>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      group.privacy_setting === 'public' ? 'bg-green-100 text-green-800' :
-                      group.privacy_setting === 'private' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {group.privacy_setting.charAt(0).toUpperCase() + group.privacy_setting.slice(1)}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium text-gray-700">Member Limits</h4>
-                    <p className="text-gray-900">
-                      {group.member_count || 0} / {group.max_members || 'Unlimited'} members
-                    </p>
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-700">Meeting Location</h4>
-                    <p className="text-gray-900">{group.meeting_location || 'Not specified'}</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Group Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-blue-50 p-4 rounded-xl text-center">
-                  <div className="text-2xl font-bold text-blue-600">{group.member_count || 0}</div>
-                  <div className="text-sm text-blue-600">Total Members</div>
+                  {/* Group Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-xl text-center">
+                      <div className="text-2xl font-bold text-blue-600">{groupMembers.length}</div>
+                      <div className="text-sm text-blue-600">Total Members</div>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-xl text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {groupMembers.filter(m => m.role === 'leader').length}
+                      </div>
+                      <div className="text-sm text-purple-600">Leaders</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-xl text-center">
+                      <div className="text-2xl font-bold text-green-600">0</div>
+                      <div className="text-sm text-green-600">Active Meetings</div>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-xl text-center">
+                      <div className="text-2xl font-bold text-orange-600">0</div>
+                      <div className="text-sm text-orange-600">Upcoming Events</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-purple-50 p-4 rounded-xl text-center">
-                  <div className="text-2xl font-bold text-purple-600">{group.leaders?.length || 0}</div>
-                  <div className="text-sm text-purple-600">Leaders</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-xl text-center">
-                  <div className="text-2xl font-bold text-green-600">{group.moderators?.length || 0}</div>
-                  <div className="text-sm text-green-600">Moderators</div>
-                </div>
-              </div>
+              )}
 
-              {/* Group Creation Info */}
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <h4 className="font-medium text-gray-700 mb-2">Group Information</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500">Created:</span>
-                    <span className="ml-2 text-gray-900">
-                      {new Date(group.created_at).toLocaleDateString()}
-                    </span>
+              {/* Members Tab */}
+              {activeTab === 'members' && (
+                <div className="space-y-6">
+                  {/* Add Members Section */}
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <h4 className="font-medium text-gray-700 mb-4">Add New Members</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="md:col-span-2">
+                        <select
+                          multiple
+                          value={selectedUsers}
+                          onChange={(e) => setSelectedUsers(Array.from(e.target.selectedOptions, option => option.value))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          size="4"
+                        >
+                          {availableUsers.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.full_name} ({user.email})
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple users</p>
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          onClick={handleAddMembers}
+                          disabled={loading || selectedUsers.length === 0}
+                          className="w-full bg-purple-500 text-white px-4 py-3 rounded-xl hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                        >
+                          {loading ? 'Adding...' : `Add ${selectedUsers.length} Member(s)`}
+                        </button>
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Current Members List */}
                   <div>
-                    <span className="text-gray-500">Last Updated:</span>
-                    <span className="ml-2 text-gray-900">
-                      {new Date(group.updated_at).toLocaleDateString()}
-                    </span>
+                    <h4 className="font-medium text-gray-700 mb-4">Current Members ({groupMembers.length})</h4>
+                    <div className="space-y-2">
+                      {groupMembers.map((member) => (
+                        <div key={member.id} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                              {member.full_name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{member.full_name}</p>
+                              <p className="text-sm text-gray-500">{member.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              member.role === 'leader' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {member.role || 'Member'}
+                            </span>
+                            <button
+                              onClick={() => handleRemoveMember(member.id, member.full_name)}
+                              className="text-red-600 hover:text-red-800 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Meetings Tab */}
+              {activeTab === 'meetings' && (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📅</div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Group Meetings</h3>
+                  <p className="text-gray-600 mb-6">Meeting management will be available soon</p>
+                  <button
+                    onClick={startGroupVideoMeeting}
+                    disabled={loading}
+                    className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
+                  >
+                    {loading ? 'Starting...' : '📹 Start Video Meeting Now'}
+                  </button>
+                </div>
+              )}
+
+              {/* Activities Tab */}
+              {activeTab === 'activities' && (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📝</div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Group Activities</h3>
+                  <p className="text-gray-600">Activity tracking will be available soon</p>
+                </div>
+              )}
             </div>
           )}
         </div>
