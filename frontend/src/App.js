@@ -2605,23 +2605,6 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     projectId: 'default-application_10499703'
   };
 
-  // Map user role to Agora role for church-specific permissions
-  const getUserAgoraRole = (userType) => {
-    switch(userType) {
-      case 'super_admin':
-      case 'group_admin':
-      case 'team_leader':
-        return 'host'; // Church leaders get host privileges
-      case 'member':
-      default:
-        return 'audience'; // Regular members are audience
-    }
-  };
-
-  useEffect(() => {
-    fetchChurchVideoRooms();
-  }, []);
-
   // Add safety check for user availability
   if (!user) {
     return (
@@ -2636,13 +2619,248 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     );
   }
 
-  const fetchChurchVideoRooms = async () => {
+  // Initialize component
+  useEffect(() => {
+    generateJWTToken();
+    fetchAvailableChannels();
+  }, []);
+
+  // Map user role to Agora role for church-specific permissions
+  const getUserAgoraRole = (userType) => {
+    switch(userType) {
+      case 'super_admin':
+      case 'group_admin':
+      case 'team_leader':
+        return 'host'; // Church leaders get host privileges
+      case 'member':
+      default:
+        return 'audience'; // Regular members are audience
+    }
+  };
+
+  // Generate JWT token for Managed Services API
+  const generateJWTToken = async () => {
+    try {
+      const response = await axios.post(`${API}/agora/jwt/generate`, {
+        user_role: user.role
+      });
+      
+      if (response.data.success) {
+        setJwtToken(response.data.jwt_token);
+      }
+    } catch (error) {
+      console.error('Failed to generate JWT token:', error);
+      setMessage({ type: 'error', text: 'Failed to authenticate for video services' });
+    }
+  };
+
+  // Fetch available channels
+  const fetchAvailableChannels = async () => {
     try {
       const response = await axios.get(`${API}/church-video/rooms`);
-      setChurchVideoRooms(response.data);
+      setAvailableChannels(response.data || []);
     } catch (error) {
-      console.error('Failed to fetch church video rooms:', error);
-      setMessage({ type: 'error', text: 'Failed to fetch video rooms' });
+      console.error('Failed to fetch channels:', error);
+      setMessage({ type: 'error', text: 'Failed to fetch video channels' });
+    }
+  };
+
+  // Create new meeting channel
+  const createMeetingChannel = async (e) => {
+    e.preventDefault();
+    if (!jwtToken) {
+      await generateJWTToken();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API}/agora/channel/create`, {
+        group_id: newChannel.group_id,
+        title: newChannel.title,
+        enable_pstn: newChannel.enable_pstn
+      });
+
+      if (response.data.success) {
+        setChannelData(response.data.channel);
+        setShowCreateChannel(false);
+        setNewChannel({ title: '', group_id: '', enable_pstn: true });
+        setMessage({ type: 'success', text: 'Church meeting channel created successfully!' });
+        fetchAvailableChannels();
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to create meeting channel' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Join meeting channel
+  const joinMeetingChannel = async (channel) => {
+    if (!jwtToken) {
+      await generateJWTToken();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userRole = getUserAgoraRole(user.role);
+      const passphrase = userRole === 'host' ? 
+        channel.host_passphrase : 
+        channel.viewer_passphrase;
+
+      const response = await axios.post(`${API}/agora/channel/join`, {
+        passphrase: passphrase,
+        jwt_token: jwtToken
+      });
+
+      if (response.data.success) {
+        setJoinData(response.data.join_data);
+        setChannelData(channel);
+        setVideoCall(true);
+        setMessage({ type: 'success', text: 'Joined church video conference successfully!' });
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to join meeting channel' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Start meeting recording
+  const startRecording = async () => {
+    if (!jwtToken || !channelData) return;
+
+    try {
+      const response = await axios.post(`${API}/agora/recording/start`, {
+        passphrase: channelData.host_passphrase,
+        jwt_token: jwtToken,
+        layout: 'presenter'
+      });
+
+      if (response.data.success) {
+        setIsRecording(true);
+        setMessage({ type: 'success', text: 'Recording started successfully!' });
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to start recording' 
+      });
+    }
+  };
+
+  // Stop meeting recording
+  const stopRecording = async () => {
+    if (!jwtToken || !channelData) return;
+
+    try {
+      const response = await axios.post(`${API}/agora/recording/stop`, {
+        passphrase: channelData.host_passphrase,
+        jwt_token: jwtToken
+      });
+
+      if (response.data.success) {
+        setIsRecording(false);
+        setMessage({ type: 'success', text: 'Recording stopped and saved successfully!' });
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to stop recording' 
+      });
+    }
+  };
+
+  // Set recording layout
+  const setRecordingLayout = async (preset) => {
+    if (!jwtToken || !channelData) return;
+
+    try {
+      const response = await axios.post(`${API}/agora/recording/layout`, {
+        passphrase: channelData.host_passphrase,
+        jwt_token: jwtToken,
+        preset: preset
+      });
+
+      if (response.data.success) {
+        setMessage({ type: 'success', text: `Layout changed to ${preset}` });
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.detail || 'Failed to change layout' 
+      });
+    }
+  };
+
+  // End meeting
+  const endMeeting = async () => {
+    try {
+      if (isRecording) {
+        await stopRecording();
+      }
+      if (isStreaming) {
+        setIsStreaming(false);
+      }
+      
+      // Clean up state
+      setVideoCall(false);
+      setChannelData(null);
+      setJoinData(null);
+      setCurrentScripture('');
+      setIsRecording(false);
+      setIsStreaming(false);
+      
+      setMessage({ type: 'success', text: 'Meeting ended successfully' });
+      
+    } catch (error) {
+      console.error('Failed to end meeting:', error);
+    }
+  };
+
+  // Update scripture display
+  const updateScriptureDisplay = (verse) => {
+    setCurrentScripture(verse);
+    setMessage({ type: 'success', text: 'Scripture display updated' });
+  };
+
+  // Handle slideshow upload
+  const handleSlideShowUpload = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('slideshow', file);
+      
+      // This would be implemented with your file upload endpoint
+      // const response = await axios.post(`${API}/upload-slideshow`, formData);
+      
+      setSlideShow({ name: file.name, url: URL.createObjectURL(file) });
+      setMessage({ type: 'success', text: 'Slideshow uploaded successfully' });
+      
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to upload slideshow' });
+    }
+  };
+
+  // Camera device selection
+  const selectCameraDevice = async (deviceId) => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const camera = devices.find(device => 
+        device.kind === 'videoinput' && device.deviceId === deviceId
+      );
+      
+      setCameraDevice(camera);
+      setMessage({ type: 'success', text: `Camera switched to ${camera?.label || 'selected device'}` });
+      
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to select camera device' });
     }
   };
 
