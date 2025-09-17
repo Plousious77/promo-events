@@ -720,6 +720,16 @@ const SuperAdminPortal = () => {
                 {isUserView ? '🔧 Switch to Admin View' : '👤 Switch to User View'}
               </button>
               
+              {/* Sign Out Button - Only show in User View */}
+              {isUserView && (
+                <button
+                  onClick={logout}
+                  className="px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
+                >
+                  🚪 Sign Out
+                </button>
+              )}
+              
               <div className="flex items-center space-x-2 bg-gradient-to-r from-purple-100 to-purple-200 px-4 py-2 rounded-full">
                 <span className="text-2xl">💰</span>
                 <span className="font-bold text-purple-700">{user?.coins?.toLocaleString() || 0} YHWH Coins</span>
