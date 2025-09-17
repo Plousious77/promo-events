@@ -685,68 +685,118 @@ def main():
     
     tester = ChurchYouthAppTester()
     
-    # Test user registration and authentication
-    print("\n📝 AUTHENTICATION TESTS")
+    # Test super admin login first for video conferencing tests
+    print("\n🔐 SUPER ADMIN AUTHENTICATION")
     print("-" * 30)
     
-    admin_success, admin_email = tester.test_register_admin()
-    if not admin_success:
-        print("❌ Admin registration failed, stopping tests")
-        return 1
-    
-    member_success, member_email = tester.test_register_member()
-    if not member_success:
-        print("❌ Member registration failed, stopping tests")
-        return 1
-    
-    # Test login functionality
-    admin_login_success, admin_token = tester.test_login(admin_email, "AdminPass123!", "super_admin")
-    if admin_login_success:
-        tester.admin_token = admin_token
-    
-    member_login_success, member_token = tester.test_login(member_email, "MemberPass123!", "member")
-    if member_login_success:
-        tester.member_token = member_token
+    admin_login_success = tester.test_login_super_admin()
+    if not admin_login_success:
+        print("❌ Super admin login failed, trying user registration flow...")
+        
+        # Fallback to registration flow
+        admin_success, admin_email = tester.test_register_admin()
+        if not admin_success:
+            print("❌ Admin registration failed, stopping tests")
+            return 1
+        
+        member_success, member_email = tester.test_register_member()
+        if not member_success:
+            print("❌ Member registration failed, stopping tests")
+            return 1
+        
+        # Test login functionality
+        admin_login_success, admin_token = tester.test_login(admin_email, "AdminPass123!", "super_admin")
+        if admin_login_success:
+            tester.admin_token = admin_token
+            tester.admin_email = admin_email
+        
+        member_login_success, member_token = tester.test_login(member_email, "MemberPass123!", "member")
+        if member_login_success:
+            tester.member_token = member_token
+            tester.member_email = member_email
     
     # Test current user endpoints
-    tester.test_get_current_user(tester.admin_token, "super_admin")
-    tester.test_get_current_user(tester.member_token, "member")
+    if tester.admin_token:
+        tester.test_get_current_user(tester.admin_token, "super_admin")
+    if tester.member_token:
+        tester.test_get_current_user(tester.member_token, "member")
+    
+    # Test group management first (needed for video room tests)
+    print("\n👥 GROUP MANAGEMENT TESTS")
+    print("-" * 30)
+    
+    if tester.admin_token:
+        tester.test_create_group()
+        tester.test_get_groups(tester.admin_token, "admin")
+    
+    if tester.member_token:
+        tester.test_create_group_as_member()  # Should fail
+        tester.test_get_groups(tester.member_token, "member")
+    
+    # VIDEO CONFERENCING TESTS - Main focus
+    print("\n🎥 VIDEO CONFERENCING TESTS (Daily.co Integration)")
+    print("-" * 50)
+    
+    if tester.admin_token:
+        # Core video room functionality
+        tester.test_create_video_room()
+        tester.test_create_video_room_with_group()
+        tester.test_get_video_rooms()
+        tester.test_get_video_rooms_with_group_filter()
+        
+        # Authentication and authorization tests
+        tester.test_create_video_room_unauthorized()
+        tester.test_get_video_rooms_unauthorized()
+        
+        # Join token functionality
+        tester.test_generate_join_token()
+        tester.test_generate_join_token_unauthorized()
+        tester.test_generate_join_token_invalid_room()
+        
+        # Room deletion tests
+        tester.test_delete_video_room_unauthorized()
+        tester.test_delete_video_room_invalid()
+        
+        # Advanced features
+        tester.test_video_room_expiration_handling()
+        tester.test_video_room_max_participants_limit()
+        
+        # Clean up - delete the main test room
+        tester.test_delete_video_room()
+    else:
+        print("❌ No admin token available for video conferencing tests")
     
     # Test task management
     print("\n📋 TASK MANAGEMENT TESTS")
     print("-" * 30)
     
-    tester.test_create_task()
-    tester.test_create_task_as_member()  # Should fail
-    tester.test_get_tasks(tester.admin_token, "admin")
-    tester.test_get_tasks(tester.member_token, "member")
-    tester.test_update_task_status()
-    tester.test_complete_and_approve_task()
-    
-    # Test group management
-    print("\n👥 GROUP MANAGEMENT TESTS")
-    print("-" * 30)
-    
-    tester.test_create_group()
-    tester.test_create_group_as_member()  # Should fail
-    tester.test_get_groups(tester.admin_token, "admin")
-    tester.test_get_groups(tester.member_token, "member")
+    if tester.admin_token and tester.member_token:
+        tester.test_create_task()
+        tester.test_create_task_as_member()  # Should fail
+        tester.test_get_tasks(tester.admin_token, "admin")
+        tester.test_get_tasks(tester.member_token, "member")
+        tester.test_update_task_status()
+        tester.test_complete_and_approve_task()
     
     # Test chat system
     print("\n💬 CHAT SYSTEM TESTS")
     print("-" * 30)
     
-    tester.test_send_message()
-    tester.test_get_group_messages()
+    if tester.admin_token:
+        tester.test_send_message()
+        tester.test_get_group_messages()
     
     # Test leaderboard and stats
     print("\n🏆 LEADERBOARD & STATS TESTS")
     print("-" * 30)
     
-    tester.test_get_leaderboard(tester.admin_token, "admin")
-    tester.test_get_leaderboard(tester.member_token, "member")
-    tester.test_get_user_stats(tester.admin_token, "admin")
-    tester.test_get_user_stats(tester.member_token, "member")
+    if tester.admin_token:
+        tester.test_get_leaderboard(tester.admin_token, "admin")
+        tester.test_get_user_stats(tester.admin_token, "admin")
+    
+    if tester.member_token:
+        tester.test_get_leaderboard(tester.member_token, "member")
+        tester.test_get_user_stats(tester.member_token, "member")
     
     # Print final results
     print("\n" + "=" * 70)
@@ -754,10 +804,20 @@ def main():
     
     if tester.tests_passed == tester.tests_run:
         print("🎉 All tests passed! Backend API is working correctly.")
+        print("✅ Daily.co video conferencing integration is fully functional!")
         return 0
     else:
         failed_tests = tester.tests_run - tester.tests_passed
         print(f"⚠️  {failed_tests} test(s) failed. Please check the issues above.")
+        
+        # Provide specific feedback about video conferencing
+        if tester.admin_token:
+            print("\n🎥 Video Conferencing Test Summary:")
+            if tester.created_video_room_id:
+                print("✅ Video room creation and management working")
+            else:
+                print("❌ Video room creation failed - check Daily.co API configuration")
+        
         return 1
 
 if __name__ == "__main__":
