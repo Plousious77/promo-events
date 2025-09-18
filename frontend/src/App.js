@@ -2569,30 +2569,30 @@ const RegularMemberView = ({ user }) => {
   );
 };
 
-// Enhanced Church Meeting Interface Component - Complete Managed Services API Integration
+// Simplified Working Church Video Conference Component
 const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
   const { user } = useAuth();
   
   // State management
-  const [channelData, setChannelData] = useState(null);
-  const [joinData, setJoinData] = useState(null);
-  const [jwtToken, setJwtToken] = useState(null);
+  const [churchVideoRooms, setChurchVideoRooms] = useState([]);
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
+  const [activeRoom, setActiveRoom] = useState(null);
   const [loading, setLoading] = useState(false);
   const [videoCall, setVideoCall] = useState(false);
+  const [agoraConfig, setAgoraConfig] = useState(null);
+  const [currentScripture, setCurrentScripture] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [currentScripture, setCurrentScripture] = useState('');
-  const [availableChannels, setAvailableChannels] = useState([]);
-  const [showCreateChannel, setShowCreateChannel] = useState(false);
-  const [newChannel, setNewChannel] = useState({
-    title: '',
-    group_id: '',
-    enable_pstn: true
-  });
 
-  const AGORA_CONFIG = {
-    projectId: 'default-application_10499703'
-  };
+  // Room creation form state
+  const [newRoom, setNewRoom] = useState({
+    room_name: '',
+    service_type: 'main_service',
+    max_participants: 1000,
+    enable_recording: true,
+    enable_streaming: false,
+    group_id: ''
+  });
 
   // User safety check
   if (!user) {
@@ -2610,157 +2610,113 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
 
   // Initialize component
   useEffect(() => {
-    generateJWTToken();
-    fetchAvailableChannels();
+    fetchChurchVideoRooms();
   }, []);
 
-  // Generate JWT token
-  const generateJWTToken = async () => {
-    try {
-      const response = await axios.post(`${API}/agora/jwt/generate`);
-      
-      if (response.data.success) {
-        setJwtToken(response.data.jwt_token);
-      }
-    } catch (error) {
-      console.error('Failed to generate JWT token:', error);
-      setMessage({ type: 'error', text: 'Failed to authenticate for video services' });
+  // Map user role to Agora role
+  const getUserAgoraRole = (userType) => {
+    switch(userType) {
+      case 'super_admin':
+      case 'group_admin':
+      case 'team_leader':
+        return 'host';
+      case 'member':
+      default:
+        return 'audience';
     }
   };
 
-  // Fetch available channels
-  const fetchAvailableChannels = async () => {
+  // Fetch church video rooms
+  const fetchChurchVideoRooms = async () => {
     try {
       const response = await axios.get(`${API}/church-video/rooms`);
-      setAvailableChannels(response.data || []);
+      setChurchVideoRooms(response.data || []);
     } catch (error) {
-      console.error('Failed to fetch channels:', error);
+      console.error('Failed to fetch church video rooms:', error);
+      setMessage({ type: 'error', text: 'Failed to fetch video rooms' });
     }
   };
 
-  // Create meeting channel
-  const createMeetingChannel = async (e) => {
+  // Create video room
+  const handleCreateRoom = async (e) => {
     e.preventDefault();
-    if (!jwtToken) {
-      await generateJWTToken();
-      return;
-    }
-
     setLoading(true);
-    try {
-      const response = await axios.post(`${API}/agora/channel/create`, {
-        group_id: newChannel.group_id,
-        title: newChannel.title,
-        enable_pstn: newChannel.enable_pstn
-      });
 
-      if (response.data.success) {
-        setChannelData(response.data.channel);
-        setShowCreateChannel(false);
-        setNewChannel({ title: '', group_id: '', enable_pstn: true });
-        setMessage({ type: 'success', text: 'Church meeting channel created successfully!' });
-        fetchAvailableChannels();
-      }
+    try {
+      const response = await axios.post(`${API}/church-video/create`, newRoom);
+      setMessage({ type: 'success', text: 'Church video room created successfully!' });
+      setNewRoom({
+        room_name: '',
+        service_type: 'main_service',
+        max_participants: 1000,
+        enable_recording: true,
+        enable_streaming: false,
+        group_id: ''
+      });
+      setShowCreateRoom(false);
+      fetchChurchVideoRooms();
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.detail || 'Failed to create meeting channel' 
+        text: error.response?.data?.detail || 'Failed to create video room' 
       });
     } finally {
       setLoading(false);
     }
   };
 
-  // Join meeting channel
-  const joinMeetingChannel = async (channel) => {
-    if (!jwtToken) {
-      await generateJWTToken();
-      return;
-    }
-
+  // Join video room
+  const handleJoinRoom = async (room) => {
     setLoading(true);
     try {
-      const userRole = user.role;
-      const passphrase = (userRole === 'super_admin' || userRole === 'group_admin') ? 
-        channel.host_passphrase : 
-        channel.viewer_passphrase;
-
-      const response = await axios.post(`${API}/agora/channel/join`, {
-        passphrase: passphrase,
-        jwt_token: jwtToken
+      const userAgoraRole = getUserAgoraRole(user?.role);
+      
+      // Generate Agora token using the working endpoint
+      const tokenResponse = await axios.post(`${API}/agora/token`, {
+        channel_name: room.channel_name,
+        uid: Math.floor(Math.random() * 10000) + 1000,
+        role: userAgoraRole,
+        expire_time: 7200
       });
 
-      if (response.data.success) {
-        setJoinData(response.data.join_data);
-        setChannelData(channel);
-        setVideoCall(true);
-        setMessage({ type: 'success', text: 'Joined church video conference successfully!' });
+      const config = {
+        appId: 'default-application_10499703',
+        channel: room.channel_name,
+        token: tokenResponse.data.token,
+        uid: tokenResponse.data.uid,
+        role: userAgoraRole,
+      };
+
+      // Validate config
+      if (!config.role || (config.role !== 'host' && config.role !== 'audience')) {
+        console.error('Invalid Agora role detected:', config.role);
+        config.role = 'audience';
       }
+
+      setAgoraConfig(config);
+      setActiveRoom(room);
+      setVideoCall(true);
+      
+      setMessage({ type: 'success', text: 'Joined church video conference successfully!' });
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.detail || 'Failed to join meeting channel' 
+        text: error.response?.data?.detail || 'Failed to join video room' 
       });
     } finally {
       setLoading(false);
     }
   };
 
-  // Start/Stop recording
-  const toggleRecording = async () => {
-    if (!jwtToken || !channelData) return;
-
-    try {
-      const endpoint = isRecording ? 'stop' : 'start';
-      const response = await axios.post(`${API}/agora/recording/${endpoint}`, {
-        passphrase: channelData.host_passphrase,
-        jwt_token: jwtToken,
-        layout: 'presenter'
-      });
-
-      if (response.data.success) {
-        setIsRecording(!isRecording);
-        setMessage({ 
-          type: 'success', 
-          text: isRecording ? 'Recording stopped and saved!' : 'Recording started!' 
-        });
-      }
-    } catch (error) {
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.detail || `Failed to ${isRecording ? 'stop' : 'start'} recording` 
-      });
-    }
-  };
-
-  // Set recording layout
-  const setRecordingLayout = async (preset) => {
-    if (!jwtToken || !channelData) return;
-
-    try {
-      const response = await axios.post(`${API}/agora/recording/layout`, {
-        passphrase: channelData.host_passphrase,
-        jwt_token: jwtToken,
-        preset: preset
-      });
-
-      if (response.data.success) {
-        setMessage({ type: 'success', text: `Layout changed to ${preset}` });
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to change layout' });
-    }
-  };
-
-  // End meeting
-  const endMeeting = () => {
+  // Leave video room
+  const handleLeaveRoom = () => {
     setVideoCall(false);
-    setChannelData(null);
-    setJoinData(null);
+    setActiveRoom(null);
+    setAgoraConfig(null);
     setCurrentScripture('');
     setIsRecording(false);
     setIsStreaming(false);
-    setMessage({ type: 'success', text: 'Meeting ended successfully' });
+    setMessage({ type: 'success', text: 'Left video conference successfully' });
   };
 
   // Update scripture display
@@ -2769,291 +2725,333 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
     setMessage({ type: 'success', text: 'Scripture display updated' });
   };
 
-  // Main render - Meeting lobby
-  if (!videoCall || !channelData) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">🎥 Church Video Conferences</h1>
-            <p className="text-gray-600">Create and manage video conference meetings for your church groups</p>
-          </div>
+  // Service type icons
+  const getServiceIcon = (serviceType) => {
+    const icons = {
+      'main_service': '⛪',
+      'bible_study': '📖',
+      'youth_meeting': '👨‍👩‍👧‍👦',
+      'prayer': '🙏',
+      'worship': '🎵'
+    };
+    return icons[serviceType] || '📹';
+  };
 
-          {(user.role === 'super_admin' || user.role === 'group_admin') && (
-            <div className="mb-6">
-              <button
-                onClick={() => setShowCreateChannel(true)}
-                className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold"
+  // In-Meeting Interface
+  if (videoCall && activeRoom && agoraConfig) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-4">
+        {/* Meeting Header */}
+        <div className="bg-gradient-to-r from-purple-800 to-blue-800 rounded-xl p-4 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">{activeRoom.room_name}</h2>
+              <p className="text-purple-200">Channel: {activeRoom.channel_name}</p>
+              <p className="text-sm text-purple-200">Service: {activeRoom.service_type}</p>
+            </div>
+            
+            <div className="flex space-x-3">
+              {isStreaming && <span className="bg-red-500 px-3 py-1 rounded-full text-sm">🔴 LIVE</span>}
+              {isRecording && <span className="bg-red-500 px-3 py-1 rounded-full text-sm">● REC</span>}
+              <button 
+                onClick={handleLeaveRoom}
+                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors"
               >
-                Create New Meeting Channel
+                Leave Meeting
               </button>
             </div>
-          )}
+          </div>
+        </div>
 
-          {showCreateChannel && (
-            <div className="mb-8 bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-xl font-bold mb-6">Create New Church Meeting Channel</h3>
-              <form onSubmit={createMeetingChannel} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title</label>
-                    <input
-                      type="text"
-                      required
-                      value={newChannel.title}
-                      onChange={(e) => setNewChannel({ ...newChannel, title: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
-                      placeholder="Sunday Morning Service"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Group</label>
-                    <select
-                      required
-                      value={newChannel.group_id}
-                      onChange={(e) => setNewChannel({ ...newChannel, group_id: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
-                    >
-                      <option value="">Select a group</option>
-                      {groups.map(group => (
-                        <option key={group.id} value={group.id}>{group.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+        {/* Church Service Controls */}
+        {agoraConfig.role === 'host' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-semibold mb-3">Recording</h3>
+              <button 
+                onClick={() => setIsRecording(!isRecording)}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {isRecording ? 'Stop Recording' : 'Start Recording'}
+              </button>
+            </div>
 
-                <div>
-                  <label className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={newChannel.enable_pstn}
-                      onChange={(e) => setNewChannel({ ...newChannel, enable_pstn: e.target.checked })}
-                      className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      Enable Phone Dial-in (PSTN) - Allow members to join by phone
-                    </span>
-                  </label>
-                </div>
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-semibold mb-3">Live Streaming</h3>
+              <button 
+                onClick={() => setIsStreaming(!isStreaming)}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isStreaming ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isStreaming ? 'Stop Streaming' : 'Start Streaming'}
+              </button>
+            </div>
 
-                <div className="flex space-x-4">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold disabled:opacity-50"
-                  >
-                    {loading ? 'Creating...' : 'Create Meeting Channel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateChannel(false)}
-                    className="bg-gray-500 text-white px-6 py-3 rounded-xl hover:bg-gray-600 transition-colors font-semibold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h3 className="font-semibold mb-3">Controls</h3>
+              <button 
+                onClick={() => setMessage({ type: 'info', text: 'Host controls activated' })}
+                className="w-full bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Host Controls
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Scripture Display Controls */}
+        <div className="bg-purple-900 rounded-xl p-4 mb-6">
+          <h3 className="text-lg font-semibold mb-3">Scripture Display</h3>
+          <div className="flex space-x-3">
+            <input
+              type="text"
+              placeholder="Display scripture verse (e.g., John 3:16 - For God so loved the world...)"
+              value={currentScripture}
+              onChange={(e) => setCurrentScripture(e.target.value)}
+              className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+            />
+            <button 
+              onClick={() => updateScriptureDisplay(currentScripture)}
+              className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg transition-colors font-medium"
+            >
+              Update Scripture
+            </button>
+          </div>
+        </div>
+
+        {/* Main Video Area */}
+        <div className="relative bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
+          <AgoraUIKit 
+            rtcProps={agoraConfig}
+            callbacks={{
+              EndCall: () => handleLeaveRoom(),
+              UserJoined: (uid) => console.log('User joined:', uid),
+              UserLeft: (uid) => console.log('User left:', uid)
+            }}
+            styleProps={{
+              localBtnContainer: {
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                borderRadius: '12px',
+                padding: '10px'
+              },
+              maxViewContainer: {
+                borderRadius: '12px'
+              }
+            }}
+          />
+
+          {/* Scripture Overlay */}
+          {currentScripture && (
+            <div className="absolute bottom-20 left-8 right-8 bg-black bg-opacity-80 text-white p-4 rounded-lg text-center z-10">
+              <p className="text-xl font-light font-serif">{currentScripture}</p>
             </div>
           )}
+        </div>
 
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Meeting Channels</h2>
-            {availableChannels.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl shadow-lg">
-                <div className="text-6xl mb-4">📺</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Meeting Channels Created</h3>
-                <p className="text-gray-600 mb-6">Create your first church meeting channel to get started</p>
-                {(user.role === 'super_admin' || user.role === 'group_admin') && (
-                  <button
-                    onClick={() => setShowCreateChannel(true)}
-                    className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold"
-                  >
-                    Create First Channel
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {availableChannels.map(channel => (
-                  <div key={channel.id} className="bg-white rounded-2xl shadow-lg p-6 border">
-                    <div className="mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{channel.title}</h3>
-                      <p className="text-sm text-gray-600">Channel: {channel.channel_name}</p>
-                      {channel.pstn_number && (
-                        <div className="mt-2 p-2 bg-blue-50 rounded-lg">
-                          <p className="text-xs text-blue-700">📞 Dial-in: {channel.pstn_number}</p>
-                          <p className="text-xs text-blue-700">Code: {channel.pstn_dtmf}</p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <button
-                      onClick={() => joinMeetingChannel(channel)}
-                      disabled={loading}
-                      className="w-full bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
-                    >
-                      {loading ? 'Joining...' : 'Join Meeting'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Meeting Info */}
+        <div className="mt-6 bg-blue-900 rounded-xl p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h3 className="font-semibold mb-2">📺 Professional Church Broadcasting</h3>
+              <p className="text-sm text-blue-200">
+                Use the scripture display to share verses with your congregation. 
+                Start live streaming to reach members who cannot attend in person.
+              </p>
+            </div>
+            
+            <div>
+              <h3 className="font-semibold mb-2">Meeting Details</h3>
+              <p className="text-sm text-blue-200">Channel: {activeRoom.channel_name}</p>
+              {agoraConfig.role === 'host' && (
+                <p className="text-sm text-blue-200">You are the meeting host</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // In-Meeting Interface
+  // Main Lobby Interface
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4">
-      {/* Meeting Header */}
-      <div className="bg-gradient-to-r from-purple-800 to-blue-800 rounded-xl p-4 mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold">{channelData.title}</h2>
-            <p className="text-purple-200">Channel: {channelData.channel_name}</p>
-            {channelData.pstn_number && (
-              <p className="text-sm text-purple-200">📞 Dial-in: {channelData.pstn_number} • Code: {channelData.pstn_dtmf}</p>
-            )}
-          </div>
-          
-          <div className="flex space-x-3">
-            {isStreaming && <span className="bg-red-500 px-3 py-1 rounded-full text-sm">🔴 LIVE</span>}
-            {isRecording && <span className="bg-red-500 px-3 py-1 rounded-full text-sm">● REC</span>}
-            <button 
-              onClick={endMeeting}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors"
-            >
-              Leave Meeting
-            </button>
-          </div>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">🎥 Church Video Conferences</h1>
+          <p className="text-gray-600">Create and manage video conference meetings for your church groups</p>
         </div>
-      </div>
 
-      {/* Host Controls */}
-      {joinData?.isHost && (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Recording</h3>
-            <button 
-              onClick={toggleRecording}
-              className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+        {/* Create Room Button */}
+        {(user.role === 'super_admin' || user.role === 'group_admin') && (
+          <div className="mb-6">
+            <button
+              onClick={() => setShowCreateRoom(true)}
+              className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold"
             >
-              {isRecording ? 'Stop Recording' : 'Start Recording'}
+              Create New Video Room
             </button>
           </div>
+        )}
 
-          <div className="bg-gray-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Layout</h3>
-            <div className="space-y-2">
-              <button 
-                onClick={() => setRecordingLayout('presenter')}
-                className="w-full bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-              >
-                Sermon Layout
-              </button>
-              <button 
-                onClick={() => setRecordingLayout('normal')}
-                className="w-full bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-              >
-                Group Discussion
-              </button>
+        {/* Create Room Form */}
+        {showCreateRoom && (
+          <div className="mb-8 bg-white rounded-2xl shadow-lg p-6">
+            <h3 className="text-xl font-bold mb-6">Create New Church Video Room</h3>
+            <form onSubmit={handleCreateRoom} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Room Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newRoom.room_name}
+                    onChange={(e) => setNewRoom({ ...newRoom, room_name: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
+                    placeholder="Sunday Morning Service"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+                  <select
+                    value={newRoom.service_type}
+                    onChange={(e) => setNewRoom({ ...newRoom, service_type: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
+                  >
+                    <option value="main_service">⛪ Main Service</option>
+                    <option value="bible_study">📖 Bible Study</option>
+                    <option value="youth_meeting">👨‍👩‍👧‍👦 Youth Meeting</option>
+                    <option value="prayer">🙏 Prayer Meeting</option>
+                    <option value="worship">🎵 Worship Service</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Participants</label>
+                  <select
+                    value={newRoom.max_participants}
+                    onChange={(e) => setNewRoom({ ...newRoom, max_participants: parseInt(e.target.value) })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
+                  >
+                    <option value={50}>50 participants</option>
+                    <option value={200}>200 participants</option>
+                    <option value={500}>500 participants</option>
+                    <option value={1000}>1000 participants</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Group</label>
+                  <select
+                    value={newRoom.group_id}
+                    onChange={(e) => setNewRoom({ ...newRoom, group_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
+                  >
+                    <option value="">All groups</option>
+                    {groups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={newRoom.enable_recording}
+                      onChange={(e) => setNewRoom({ ...newRoom, enable_recording: e.target.checked })}
+                      className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Enable Cloud Recording</span>
+                  </label>
+                </div>
+                
+                <div>
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={newRoom.enable_streaming}
+                      onChange={(e) => setNewRoom({ ...newRoom, enable_streaming: e.target.checked })}
+                      className="w-5 h-5 text-red-600 border border-gray-300 rounded focus:ring-red-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Enable Live Streaming</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex space-x-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Creating...' : 'Create Video Room'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateRoom(false)}
+                  className="bg-gray-500 text-white px-6 py-3 rounded-xl hover:bg-gray-600 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Available Video Rooms */}
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Video Rooms</h2>
+          {churchVideoRooms.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-2xl shadow-lg">
+              <div className="text-6xl mb-4">📺</div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Video Rooms Created</h3>
+              <p className="text-gray-600 mb-6">Create your first church video room to get started</p>
+              {(user.role === 'super_admin' || user.role === 'group_admin') && (
+                <button
+                  onClick={() => setShowCreateRoom(true)}
+                  className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-colors font-semibold"
+                >
+                  Create First Room
+                </button>
+              )}
             </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Live Streaming</h3>
-            <button 
-              onClick={() => setIsStreaming(!isStreaming)}
-              className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isStreaming ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-              }`}
-            >
-              {isStreaming ? 'Stop Streaming' : 'Start Streaming'}
-            </button>
-          </div>
-
-          <div className="bg-gray-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Camera/Input</h3>
-            <select className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm">
-              <option value="">Select Camera/Input</option>
-              <option value="laptop-camera">Laptop Camera</option>
-              <option value="usb-switcher">USB Video Switcher</option>
-              <option value="external-camera">External Camera</option>
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* Scripture Display */}
-      <div className="bg-purple-900 rounded-xl p-4 mb-6">
-        <h3 className="text-lg font-semibold mb-3">Scripture Display</h3>
-        <div className="flex space-x-3">
-          <input
-            type="text"
-            placeholder="Display scripture verse (e.g., John 3:16 - For God so loved the world...)"
-            value={currentScripture}
-            onChange={(e) => setCurrentScripture(e.target.value)}
-            className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-          />
-          <button 
-            onClick={() => updateScriptureDisplay(currentScripture)}
-            className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg transition-colors font-medium"
-          >
-            Update Scripture
-          </button>
-        </div>
-      </div>
-
-      {/* Main Video Area */}
-      <div className="relative bg-black rounded-xl overflow-hidden" style={{ height: '600px' }}>
-        {joinData && (
-          <AgoraUIKit 
-            rtcProps={{
-              appId: AGORA_CONFIG.projectId,
-              channel: joinData.channel_name,
-              token: joinData.main_user?.rtc || '',
-              uid: joinData.main_user?.uid || 0,
-              role: joinData.isHost ? 'host' : 'audience'
-            }}
-            callbacks={{
-              EndCall: () => endMeeting(),
-              UserJoined: (uid) => console.log('User joined:', uid),
-              UserLeft: (uid) => console.log('User left:', uid)
-            }}
-          />
-        )}
-
-        {/* Scripture Overlay */}
-        {currentScripture && (
-          <div className="absolute bottom-20 left-8 right-8 bg-black bg-opacity-80 text-white p-4 rounded-lg text-center z-10">
-            <p className="text-xl font-light font-serif">{currentScripture}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Meeting Info */}
-      <div className="mt-6 bg-blue-900 rounded-xl p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <h3 className="font-semibold mb-2">📺 Professional Church Broadcasting</h3>
-            <p className="text-sm text-blue-200">
-              Use the scripture display to share verses with your congregation. 
-              Start live streaming to reach members who cannot attend in person.
-            </p>
-          </div>
-          
-          <div>
-            <h3 className="font-semibold mb-2">Meeting Details</h3>
-            <p className="text-sm text-blue-200">Channel: {channelData.channel_name}</p>
-            {joinData?.isHost && (
-              <p className="text-sm text-blue-200">You are the meeting host</p>
-            )}
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {churchVideoRooms.map(room => (
+                <div key={room.id} className="bg-white rounded-2xl shadow-lg p-6 border">
+                  <div className="mb-4">
+                    <div className="flex items-center mb-2">
+                      <span className="text-2xl mr-2">{getServiceIcon(room.service_type)}</span>
+                      <h3 className="text-lg font-semibold text-gray-900">{room.room_name}</h3>
+                    </div>
+                    <p className="text-sm text-gray-600">Channel: {room.channel_name}</p>
+                    <p className="text-sm text-gray-600">Max: {room.max_participants} participants</p>
+                    <div className="flex space-x-2 mt-2">
+                      {room.enable_recording && <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">Recording</span>}
+                      {room.enable_streaming && <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Streaming</span>}
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => handleJoinRoom(room)}
+                    disabled={loading}
+                    className="w-full bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
+                  >
+                    {loading ? 'Joining...' : 'Join Service'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
