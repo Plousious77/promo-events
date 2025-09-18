@@ -2617,9 +2617,7 @@ const VideoConferenceContent = ({ API, groups, users, setMessage }) => {
   // Generate JWT token
   const generateJWTToken = async () => {
     try {
-      const response = await axios.post(`${API}/agora/jwt/generate`, {
-        user_role: user.role
-      });
+      const response = await axios.post(`${API}/agora/jwt/generate`);
       
       if (response.data.success) {
         setJwtToken(response.data.jwt_token);
