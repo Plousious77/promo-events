@@ -2164,10 +2164,9 @@ async def create_church_roles(
 
 @api_router.post("/agora/jwt/generate", response_model=dict)
 async def generate_jwt_token(
-    user_role: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Generate JWT token for Managed Services API authentication"""
+    """Generate JWT token for Managed Services API authentication (simplified)"""
     try:
         # Map church roles to Agora roles
         role_mapping = {
@@ -2179,8 +2178,7 @@ async def generate_jwt_token(
         
         agora_role = role_mapping.get(current_user.role, "church_member")
         
-        # Generate JWT token (this would typically be done with proper JWT library and secret)
-        # For now, we'll return a placeholder structure
+        # Generate JWT token
         import jwt as pyjwt
         
         payload = {
