@@ -207,16 +207,16 @@ class UserResponse(BaseModel):
     full_name: str
     phone: Optional[str] = None
     role: str
-    status: str
+    status: str = AccountStatus.PENDING_VERIFICATION
     group_id: Optional[str] = None
     profile_picture: Optional[str] = None
     bio: Optional[str] = None
-    time_zone: str
-    language: str
-    points: int
-    coins: int
-    email_verified: bool
-    two_factor_enabled: bool
+    time_zone: str = "UTC"
+    language: str = "en"
+    points: int = 0
+    coins: int = 0
+    email_verified: bool = False
+    two_factor_enabled: bool = False
     created_at: datetime
     last_login: Optional[datetime] = None
 
